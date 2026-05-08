@@ -19,12 +19,17 @@ npm run dev
 
 访问 <http://localhost:3000> 。
 
-## 部署到 Vercel
+## 部署到 Netlify
+
+仓库根目录已提供 `netlify.toml`，使用 Netlify 官方 Next.js Runtime v5，零改动支持 App Router + API Routes。
 
 1. Fork / 克隆本仓库到自己的 GitHub
-2. 登录 <https://vercel.com> → **Add New Project** → 选择该仓库
-3. Framework 自动识别为 Next.js，**无需任何环境变量**，直接 Deploy
-4. 部署完成后，点击右上角 **设置** 配置 AI（Base URL / Key / Model 存于本地浏览器）
+2. 登录 <https://app.netlify.com> → **Add new site → Import an existing project** → 选择该仓库
+3. 构建配置自动读取 `netlify.toml`（Build command: `npm run build`，Publish: `.next`，Node 20）
+4. **无需配置任何环境变量**，点击 **Deploy site**
+5. 部署完成后访问站点 → 右上角 **设置** 配置 AI（Base URL / Key / Model 存于本地浏览器）
+
+> 备注：`/api/ai/chat` 会被 Netlify 自动编译为 Serverless Function；DXF 解析和 3D 渲染均在浏览器完成，对 Function 调用次数零消耗。
 
 ## AI 助手配置
 
