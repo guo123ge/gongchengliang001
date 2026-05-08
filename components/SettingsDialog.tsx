@@ -2,37 +2,52 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
+const KEY = "rebar-quant.aiConfig";
+
+export interface AIConfig {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  temperature: number;
+}
+
+export function loadAIConfig(): AIConfig {
+  if (typeof window === "undefined") return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
+    const c = JSON.parse(raw);
+    return {
+      baseUrl: c.baseUrl || "",
+      model: c.model || "",
+      apiKey: c.apiKey || "",
+      temperature: typeof c.temperature === "number" ? c.temperature : 0.3,
+    };
+  } catch {
+    return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
+  }
+}
+
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [temperature, setTemperature] = useState(0.3);
-  const [hasKey, setHasKey] = useState(false);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    fetch("/api/ai/config").then((r) => r.json()).then((d) => {
-      setBaseUrl(d.baseUrl || "");
-      setModel(d.model || "");
-      setTemperature(d.temperature ?? 0.3);
-      setHasKey(!!d.hasKey);
-    });
+    const c = loadAIConfig();
+    setBaseUrl(c.baseUrl);
+    setModel(c.model);
+    setApiKey(c.apiKey);
+    setTemperature(c.temperature);
   }, []);
 
-  const save = async () => {
-    const r = await fetch("/api/ai/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ baseUrl, model, apiKey: apiKey || undefined, temperature }),
-    });
-    if (r.ok) {
-      setMsg("已保存");
-      setApiKey("");
-      setHasKey(true);
-      setTimeout(() => setMsg(""), 1500);
-    } else {
-      setMsg("保存失败");
-    }
+  const save = () => {
+    const cfg: AIConfig = { baseUrl, model, apiKey, temperature };
+    localStorage.setItem(KEY, JSON.stringify(cfg));
+    setMsg("已保存");
+    setTimeout(() => setMsg(""), 1500);
   };
 
   return (
@@ -54,11 +69,9 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               placeholder="gpt-4o-mini / deepseek-chat / qwen-plus" />
           </div>
           <div>
-            <div className="text-xs text-eng-muted mb-1">
-              API Key {hasKey && <span className="text-eng-ok">（已配置，留空则保留原值）</span>}
-            </div>
+            <div className="text-xs text-eng-muted mb-1">API Key</div>
             <input className="input-eng" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder={hasKey ? "••••••••" : "sk-..."} />
+              placeholder="sk-..." />
           </div>
           <div>
             <div className="text-xs text-eng-muted mb-1">Temperature：{temperature}</div>
@@ -66,7 +79,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setTemperature(+e.target.value)} className="w-full" />
           </div>
           <div className="text-xs text-eng-muted">
-            Key 保存在服务端 SQLite，前端不可见，通过 <code>/api/ai/chat</code> 代理调用。
+            配置保存在浏览器 <code>localStorage</code>。请求经 <code>/api/ai/chat</code> 服务端代理转发以避开 CORS，但 Key 仅在你本机使用。
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">

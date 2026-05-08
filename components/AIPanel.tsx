@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Send, Loader2, Bot, User as UserIcon } from "lucide-react";
 import { useStore } from "@/lib/store";
 import type { Component } from "@/lib/types";
+import { loadAIConfig } from "./SettingsDialog";
 
 interface Msg { role: "user" | "assistant"; content: string }
 
@@ -28,12 +29,17 @@ export default function AIPanel() {
     setInput("");
     setBusy(true);
     try {
+      const cfg = loadAIConfig();
       const r = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [...next.map((m) => ({ role: m.role, content: m.content })),
             { role: "user" as const, content: context }],
+          baseUrl: cfg.baseUrl,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          temperature: cfg.temperature,
         }),
       });
       const data = await r.json();
