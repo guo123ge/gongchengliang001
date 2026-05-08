@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id         String      @id @default(cuid())
+  name       String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  components Component[]
+}
+
+model Component {
+  id         String   @id @default(cuid())
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type       String   // BEAM | SLAB | COLUMN | PILE
+  name       String
+  data       String   // JSON: geometry + concrete + rebars + placement
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AIConfig {
+  id          String @id @default(cuid())
+  baseUrl     String
+  apiKey      String
+  model       String
+  temperature Float  @default(0.3)
+  updatedAt   DateTime @updatedAt
+}

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-feature-settings: "tnum" 1;
+}
+
+/* 工程风滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* 数字表格 */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* 表单输入统一样式 */
+.input-eng {
+  @apply w-full bg-eng-bg border border-eng-border rounded px-2 py-1 text-sm text-eng-text
+         focus:outline-none focus:ring-1 focus:ring-eng-accent focus:border-eng-accent;
+}
+.btn-eng {
+  @apply inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm border border-eng-border
+         bg-eng-panel2 hover:bg-eng-border transition text-eng-text disabled:opacity-50;
+}
+.btn-primary {
+  @apply inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm
+         bg-eng-accent hover:bg-eng-accent2 text-white transition disabled:opacity-50;
+}
+.panel {
+  @apply bg-eng-panel border border-eng-border rounded;
+}
+.tab-btn {
+  @apply px-3 py-1.5 text-sm text-eng-muted hover:text-eng-text border-b-2 border-transparent;
+}
+.tab-btn-active {
+  @apply text-eng-text border-eng-accent;
+}
