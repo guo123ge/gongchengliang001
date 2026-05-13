@@ -6,9 +6,11 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
     "./lib/**/*.{ts,tsx}",
   ],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
+        // 原有工程色板（保持兼容）
         eng: {
           bg: "#0f172a",
           panel: "#1e293b",
@@ -23,6 +25,73 @@ const config: Config = {
           err: "#dc2626",
           paper: "#f8fafc",
         },
+        // DESIGN.md 设计系统颜色
+        surface: {
+          DEFAULT: "#051424",
+          dim: "#051424",
+          bright: "#2c3a4c",
+          variant: "#273647",
+        },
+        "surface-container": {
+          lowest: "#010f1f",
+          low: "#0d1c2d",
+          DEFAULT: "#122131",
+          high: "#1c2b3c",
+          highest: "#273647",
+        },
+        primary: {
+          DEFAULT: "#adc6ff",
+          container: "#4d8eff",
+          fixed: "#d8e2ff",
+          "fixed-dim": "#adc6ff",
+        },
+        secondary: {
+          DEFAULT: "#ffb95f",
+          container: "#ee9800",
+          fixed: "#ffddb8",
+          "fixed-dim": "#ffb95f",
+        },
+        tertiary: {
+          DEFAULT: "#4edea3",
+          container: "#00a572",
+          fixed: "#6ffbbe",
+          "fixed-dim": "#4edea3",
+        },
+        error: {
+          DEFAULT: "#ffb4ab",
+          container: "#93000a",
+        },
+        outline: {
+          DEFAULT: "#8c909f",
+          variant: "#424754",
+        },
+        "on-surface": "#d4e4fa",
+        "on-surface-variant": "#c2c6d6",
+        "on-primary": "#002e6a",
+        "on-primary-container": "#00285d",
+        "on-secondary": "#472a00",
+        "on-secondary-container": "#5b3800",
+        "on-tertiary": "#003824",
+        "on-tertiary-container": "#00311f",
+        "on-error": "#690005",
+        "on-error-container": "#ffdad6",
+        background: "#051424",
+        "on-background": "#d4e4fa",
+      },
+      borderRadius: {
+        sm: "0.25rem",
+        DEFAULT: "0.5rem",
+        md: "0.75rem",
+        lg: "1rem",
+        xl: "1.5rem",
+        full: "9999px",
+      },
+      spacing: {
+        unit: "4px",
+        gutter: "16px",
+        "margin-page": "24px",
+        "panel-padding": "12px",
+        "stack-gap": "8px",
       },
       fontFamily: {
         sans: [
@@ -36,6 +105,22 @@ const config: Config = {
           "sans-serif",
         ],
         mono: ["JetBrains Mono", "Consolas", "monospace"],
+        "display-lg": ["Inter"],
+        "headline-md": ["Inter"],
+        "title-sm": ["Inter"],
+        "body-md": ["Inter"],
+        "body-sm": ["Inter"],
+        button: ["Inter"],
+        "label-code": ["JetBrains Mono"],
+      },
+      fontSize: {
+        "display-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
+        "headline-md": ["24px", { lineHeight: "32px", fontWeight: "600" }],
+        "title-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }],
+        "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+        "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }],
+        "label-code": ["11px", { lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "500" }],
+        button: ["14px", { lineHeight: "20px", fontWeight: "500" }],
       },
     },
   },

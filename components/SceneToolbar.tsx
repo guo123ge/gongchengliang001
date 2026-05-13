@@ -19,63 +19,97 @@ export default function SceneToolbar() {
   const setBlueprint = useStore((s) => s.setBlueprint);
 
   return (
-    <div className="absolute top-3 left-3 panel p-2 flex items-center gap-2 text-xs">
-      <button className="btn-eng text-xs" onClick={toggleConcrete}>
-        {showConcrete ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} 混凝土
-      </button>
-      <button className="btn-eng text-xs" onClick={toggleRebar}>
-        {showRebar ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} 钢筋
-      </button>
-      <button className={showDimensions ? "btn-primary text-xs" : "btn-eng text-xs"} onClick={toggleDimensions} title="切换尺寸标注显隐">
-        <Ruler className="w-3.5 h-3.5" />尺寸
-      </button>
-      <div className="h-4 w-px bg-eng-border" />
+    <div className="absolute top-4 left-4 glass-panel rounded-lg p-2 flex items-center gap-1.5 text-xs z-10">
+      {/* Visibility Controls */}
       <button
-        className={gizmoMode === "translate" ? "btn-primary text-xs" : "btn-eng text-xs"}
+        className={showConcrete ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
+        onClick={toggleConcrete}
+        title="切换混凝土显隐"
+      >
+        {showConcrete ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+        <span className="hidden sm:inline">混凝土</span>
+      </button>
+      <button
+        className={showRebar ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
+        onClick={toggleRebar}
+        title="切换钢筋显隐"
+      >
+        {showRebar ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+        <span className="hidden sm:inline">钢筋</span>
+      </button>
+      <button
+        className={showDimensions ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
+        onClick={toggleDimensions}
+        title="切换尺寸标注显隐"
+      >
+        <Ruler className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">尺寸</span>
+      </button>
+
+      <div className="h-5 w-px bg-outline-variant/30 mx-1" />
+
+      {/* Gizmo Controls */}
+      <button
+        className={gizmoMode === "translate" ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
         disabled={!selectedId}
         onClick={() => setGizmoMode("translate")}
         title="拖拽箭头平移构件（50mm 吸附）"
       >
-        <Move3d className="w-3.5 h-3.5" />平移
+        <Move3d className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">平移</span>
       </button>
       <button
-        className={gizmoMode === "rotate" ? "btn-primary text-xs" : "btn-eng text-xs"}
+        className={gizmoMode === "rotate" ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
         disabled={!selectedId}
         onClick={() => setGizmoMode("rotate")}
         title="拖拽圆环旋转构件"
       >
-        <RotateCw className="w-3.5 h-3.5" />旋转
+        <RotateCw className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">旋转</span>
       </button>
-      <div className="h-4 w-px bg-eng-border" />
+
+      <div className="h-5 w-px bg-outline-variant/30 mx-1" />
+
+      {/* Clip Controls */}
       <button
-        className={clip.enabled ? "btn-primary text-xs" : "btn-eng text-xs"}
+        className={clip.enabled ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
         onClick={() => setClip({ enabled: !clip.enabled })}
+        title="切换剖切面"
       >
-        <Scissors className="w-3.5 h-3.5" />剖切
+        <Scissors className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">剖切</span>
       </button>
       {clip.enabled && (
         <>
-          <select className="input-eng !py-0.5 !px-1 text-xs w-16" value={clip.axis}
-            onChange={(e) => setClip({ axis: e.target.value as any })}>
-            <option value="x">X</option><option value="y">Y</option><option value="z">Z</option>
+          <select
+            className="bg-surface border border-outline-variant/50 rounded px-1 py-0.5 text-xs text-on-surface focus:border-primary outline-none w-12"
+            value={clip.axis}
+            onChange={(e) => setClip({ axis: e.target.value as any })}
+          >
+            <option value="x">X</option>
+            <option value="y">Y</option>
+            <option value="z">Z</option>
           </select>
           <ClipSlider />
         </>
       )}
+
+      {/* Blueprint Controls */}
       {blueprint && (
         <>
-          <div className="h-4 w-px bg-eng-border" />
+          <div className="h-5 w-px bg-outline-variant/30 mx-1" />
           <button
-            className={blueprint.visible ? "btn-primary text-xs" : "btn-eng text-xs"}
+            className={blueprint.visible ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
             onClick={() => updateBlueprint({ visible: !blueprint.visible })}
             title="切换底图显隐"
           >
-            <ImageIcon className="w-3.5 h-3.5" />底图
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">底图</span>
           </button>
           <input
             type="number"
             step={0.1}
-            className="input-eng !py-0.5 !px-1 text-xs w-16"
+            className="bg-surface border border-outline-variant/50 rounded px-1 py-0.5 text-xs text-on-surface focus:border-primary outline-none w-14 font-mono"
             value={blueprint.scale}
             onChange={(e) => updateBlueprint({ scale: +e.target.value || 1 })}
             title="缩放"
@@ -83,26 +117,26 @@ export default function SceneToolbar() {
           <input
             type="number"
             step={5}
-            className="input-eng !py-0.5 !px-1 text-xs w-16"
+            className="bg-surface border border-outline-variant/50 rounded px-1 py-0.5 text-xs text-on-surface focus:border-primary outline-none w-14 font-mono"
             value={blueprint.rotation}
             onChange={(e) => updateBlueprint({ rotation: +e.target.value })}
             title="旋转（度）"
           />
           <button
-            className={blueprint.snapEnabled ? "btn-primary text-xs" : "btn-eng text-xs"}
+            className={blueprint.snapEnabled ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
             onClick={() => updateBlueprint({ snapEnabled: !blueprint.snapEnabled })}
-            title="构件拖拽时吸附到 DXF 端点（300mm 半径）"
+            title="构件拖拽时吸附到 DXF 端点"
           >
-            <Magnet className="w-3.5 h-3.5" />吸附
+            <Magnet className="w-3.5 h-3.5" />
           </button>
           <button
-            className="btn-eng text-xs"
+            className="btn-glass"
             onClick={() => updateBlueprint({ locked: !blueprint.locked })}
-            title={blueprint.locked ? "解锁底图（可拖动）" : "锁定底图（防止误拖）"}
+            title={blueprint.locked ? "解锁底图" : "锁定底图"}
           >
             {blueprint.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
           </button>
-          <button className="btn-eng text-xs" onClick={() => setBlueprint(null)} title="移除底图">
+          <button className="btn-glass text-error hover:text-error-container" onClick={() => setBlueprint(null)} title="移除底图">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </>
@@ -139,10 +173,10 @@ function ClipSlider() {
   const pos = Math.min(Math.max(clip.position, globalMin), globalMax);
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       <input
         type="range"
-        className="w-24 h-1.5 appearance-none rounded bg-eng-border accent-eng-accent cursor-pointer"
+        className="w-20 h-1 appearance-none rounded-full bg-outline-variant/30 accent-primary cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
         min={globalMin}
         max={globalMax}
         step={10}
@@ -150,7 +184,7 @@ function ClipSlider() {
         onChange={(e) => setClip({ position: +e.target.value })}
         title="拖拽调整剖切面位置"
       />
-      <span className="text-[10px] text-eng-muted w-10 text-right tabular">{pos}</span>
+      <span className="text-label-code text-on-surface-variant w-10 text-right tabular">{pos}</span>
     </div>
   );
 }

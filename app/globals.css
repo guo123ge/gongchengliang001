@@ -7,39 +7,80 @@ html, body, #__next {
 }
 
 body {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #051424;
+  color: #d4e4fa;
   font-feature-settings: "tnum" 1;
 }
 
-/* 工程风滚动条 */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+/* ─── 玻璃态面板 (Glassmorphism) ─── */
+.glass-panel {
+  background-color: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── 层级表面 (Tonal Surfaces) ─── */
+.surface-level-0 {
+  background-color: #0F172A;
+}
+.surface-level-1 {
+  background-color: #1E293B;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.surface-level-2 {
+  background-color: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── DESIGN.md 滚动条 ─── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #051424; }
+::-webkit-scrollbar-thumb { background: #424754; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #8c909f; }
 
 /* 数字表格 */
 .tabular { font-variant-numeric: tabular-nums; }
 
-/* 表单输入统一样式 */
+/* ─── 表单输入统一样式 (DESIGN.md 风格) ─── */
 .input-eng {
-  @apply w-full bg-eng-bg border border-eng-border rounded px-2 py-1 text-sm text-eng-text
-         focus:outline-none focus:ring-1 focus:ring-eng-accent focus:border-eng-accent;
+  @apply w-full bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-sm text-on-surface
+         focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary
+         font-mono;
 }
 .btn-eng {
-  @apply inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm border border-eng-border
-         bg-eng-panel2 hover:bg-eng-border transition text-eng-text disabled:opacity-50;
+  @apply inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm border border-outline-variant/50
+         bg-surface-container-high hover:bg-surface-container-highest/40 transition text-on-surface disabled:opacity-50;
 }
 .btn-primary {
+  @apply inline-flex items-center gap-1 px-4 py-2 rounded text-sm font-medium
+         bg-primary text-on-primary hover:bg-primary-fixed transition disabled:opacity-50;
+}
+.btn-secondary {
+  @apply inline-flex items-center gap-1 px-4 py-2 rounded text-sm font-medium
+         border border-outline text-on-surface hover:bg-surface-container-high transition disabled:opacity-50;
+}
+.btn-glass {
   @apply inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm
-         bg-eng-accent hover:bg-eng-accent2 text-white transition disabled:opacity-50;
+         glass-panel text-on-surface hover:bg-surface-container-high/50 transition disabled:opacity-50;
 }
 .panel {
-  @apply bg-eng-panel border border-eng-border rounded;
+  @apply bg-surface-container-low border border-outline-variant/20 rounded;
+}
+.property-card {
+  @apply bg-surface-container-low rounded-lg p-4 border border-outline-variant/20;
+}
+.property-card-header {
+  @apply text-title-sm font-semibold text-on-surface border-b border-outline-variant/20 pb-2 mb-3;
 }
 .tab-btn {
-  @apply px-3 py-1.5 text-sm text-eng-muted hover:text-eng-text border-b-2 border-transparent;
+  @apply px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface border-b-2 border-transparent;
 }
 .tab-btn-active {
-  @apply text-eng-text border-eng-accent;
+  @apply text-primary border-primary;
+}
+.quantity-chip {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono
+         bg-secondary/10 text-secondary border border-secondary/30;
 }

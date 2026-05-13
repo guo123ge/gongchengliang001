@@ -23,16 +23,16 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [leftWidth, setLeftWidth] = useState(256);
-  const [rightWidth, setRightWidth] = useState(420);
-  const [bottomHeight, setBottomHeight] = useState(160);
+  const [leftWidth, setLeftWidth] = useState(288);
+  const [rightWidth, setRightWidth] = useState(320);
+  const [bottomHeight, setBottomHeight] = useState(250);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [bottomCollapsed, setBottomCollapsed] = useState(true);
 
-  const prevLeft = useRef(256);
-  const prevRight = useRef(420);
-  const prevBottom = useRef(160);
+  const prevLeft = useRef(288);
+  const prevRight = useRef(320);
+  const prevBottom = useRef(250);
 
   const toggleLeft = () => {
     if (leftCollapsed) {
@@ -70,7 +70,7 @@ export default function Home() {
     const startX = e.clientX;
     const startW = leftWidth;
     const onMove = (ev: MouseEvent) => {
-      const w = Math.max(180, Math.min(400, startW + (ev.clientX - startX)));
+      const w = Math.max(260, Math.min(400, startW + (ev.clientX - startX)));
       setLeftWidth(w);
     };
     const onUp = () => {
@@ -87,7 +87,7 @@ export default function Home() {
     const startX = e.clientX;
     const startW = rightWidth;
     const onMove = (ev: MouseEvent) => {
-      const w = Math.max(320, Math.min(600, startW - (ev.clientX - startX)));
+      const w = Math.max(280, Math.min(480, startW - (ev.clientX - startX)));
       setRightWidth(w);
     };
     const onUp = () => {
@@ -104,7 +104,7 @@ export default function Home() {
     const startY = e.clientY;
     const startH = bottomHeight;
     const onMove = (ev: MouseEvent) => {
-      const h = Math.max(80, Math.min(400, startH - (ev.clientY - startY)));
+      const h = Math.max(180, Math.min(450, startH - (ev.clientY - startY)));
       setBottomHeight(h);
     };
     const onUp = () => {
@@ -116,56 +116,88 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-background">
+      {/* ─── TopNavBar ─── */}
       <TopBar />
+
+      {/* ─── Main Workspace ─── */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left panel */}
-        <div className="shrink-0 flex" style={{ width: leftCollapsed ? 36 : leftWidth }}>
-          <div className="flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        <div
+          className="shrink-0 flex border-r border-outline-variant/20"
+          style={{ width: leftCollapsed ? 40 : leftWidth }}
+        >
+          <div className="flex-1 overflow-hidden bg-surface-container-low">
             <LeftTree collapsed={leftCollapsed} onToggle={toggleLeft} />
           </div>
           {!leftCollapsed && (
             <div
-              className="w-1 shrink-0 cursor-col-resize bg-eng-border hover:bg-eng-accent transition-colors"
+              className="w-1 shrink-0 cursor-col-resize bg-outline-variant/30 hover:bg-primary transition-colors"
               onMouseDown={startResizeLeft}
               title="拖拽调整宽度"
             />
           )}
         </div>
 
-        {/* Center 3D scene */}
-        <div className="flex-1 relative min-w-0">
-          <Scene3D />
-          <SceneToolbar />
-          <LegendOverlay />
+        {/* Center Column (Viewport & Data) */}
+        <div className="flex-1 relative min-w-0 flex flex-col bg-surface">
+          {/* 3D Viewport */}
+          <div className="flex-1 relative overflow-hidden">
+            <Scene3D />
+            <SceneToolbar />
+            <LegendOverlay />
+
+            {/* Breadcrumb / Context overlay */}
+            <div className="absolute top-4 left-4 glass-panel rounded-lg px-4 py-2 z-10 flex items-center gap-2 font-label-code text-label-code">
+              <span className="text-on-surface-variant">标高 2</span>
+              <span className="text-outline-variant">/</span>
+              <span className="text-primary">梁柱节点 J-42</span>
+            </div>
+          </div>
+
+          {/* Bottom Data Panel */}
+          {!bottomCollapsed && (
+            <div
+              className="shrink-0 border-t border-outline-variant/20 bg-surface-container-low flex flex-col"
+              style={{ height: bottomHeight }}
+            >
+              <div
+                className="h-1 w-full cursor-row-resize bg-outline-variant/30 hover:bg-primary transition-colors"
+                onMouseDown={startResizeBottom}
+                title="拖拽调整高度"
+              />
+              <div className="flex-1 overflow-hidden">
+                <BottomBar collapsed={false} onToggle={toggleBottom} />
+              </div>
+            </div>
+          )}
+          {bottomCollapsed && (
+            <div className="shrink-0 h-7 bg-surface-container-low border-t border-outline-variant/20 flex items-center px-2">
+              <button
+                onClick={toggleBottom}
+                className="text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+              >
+                ▲ 展开面板
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Right panel */}
-        <div className="shrink-0 flex" style={{ width: rightCollapsed ? 36 : rightWidth }}>
+        {/* Right Sidebar */}
+        <div
+          className="shrink-0 flex border-l border-outline-variant/20"
+          style={{ width: rightCollapsed ? 40 : rightWidth }}
+        >
           {!rightCollapsed && (
             <div
-              className="w-1 shrink-0 cursor-col-resize bg-eng-border hover:bg-eng-accent transition-colors"
+              className="w-1 shrink-0 cursor-col-resize bg-outline-variant/30 hover:bg-primary transition-colors"
               onMouseDown={startResizeRight}
               title="拖拽调整宽度"
             />
           )}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden bg-surface-container-low">
             <RightPanel collapsed={rightCollapsed} onToggle={toggleRight} />
           </div>
-        </div>
-      </div>
-
-      {/* Bottom panel */}
-      <div className="shrink-0 flex flex-col" style={{ height: bottomCollapsed ? 28 : bottomHeight }}>
-        {!bottomCollapsed && (
-          <div
-            className="h-1 w-full cursor-row-resize bg-eng-border hover:bg-eng-accent transition-colors"
-            onMouseDown={startResizeBottom}
-            title="拖拽调整高度"
-          />
-        )}
-        <div className="flex-1 overflow-hidden">
-          <BottomBar collapsed={bottomCollapsed} onToggle={toggleBottom} />
         </div>
       </div>
     </div>

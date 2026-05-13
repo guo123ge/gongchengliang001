@@ -33,7 +33,7 @@ export default function ParamForm() {
   const [basicTab, setBasicTab] = useState<BasicTab>("geometry");
   const [rebarTab, setRebarTab] = useState<RebarTab>("rebar");
 
-  if (!c) return <div className="p-4 text-eng-muted text-sm">请在左侧选择或新增构件。</div>;
+  if (!c) return <div className="p-4 text-on-surface-variant text-sm">请在左侧选择或新增构件。</div>;
 
   const patch = (p: Partial<Component>) => updateComponent(c.id, p);
 
@@ -55,23 +55,24 @@ export default function ParamForm() {
   const autoFill = () => updateComponent(c.id, autoFillRebar({ ...c, rebars: [] }));
 
   return (
-    <div className="p-3 space-y-4 text-sm">
-      <div>
-        <div className="text-xs text-eng-muted mb-1">构件名称</div>
+    <div className="p-4 space-y-4 text-sm">
+      {/* Component Name */}
+      <div className="property-card">
+        <div className="property-card-header">构件名称</div>
         <input className="input-eng" value={c.name} onChange={(e) => patch({ name: e.target.value })} />
       </div>
 
       {/* 基本参数 */}
-      <div className="panel p-2 space-y-2">
-        <label className="text-xs text-eng-muted block">基本参数</label>
-        <select className="input-eng" value={basicTab} onChange={(e) => setBasicTab(e.target.value as BasicTab)}>
+      <div className="property-card">
+        <div className="property-card-header">基本参数</div>
+        <select className="input-eng mb-3" value={basicTab} onChange={(e) => setBasicTab(e.target.value as BasicTab)}>
           <option value="geometry">结构尺寸</option>
           <option value="concrete">混凝土参数</option>
           <option value="section">截面形状</option>
         </select>
 
         {basicTab === "geometry" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               {c.type === "BEAM" || c.type === "COLUMN" ? (
                 <>
@@ -132,28 +133,28 @@ export default function ParamForm() {
       </div>
 
       {/* 钢筋配置 */}
-      <div className="panel p-2 space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-xs text-eng-muted block">钢筋配置</label>
+      <div className="property-card">
+        <div className="flex items-center justify-between mb-3">
+          <div className="property-card-header !mb-0 !pb-0 !border-0">钢筋配置</div>
           {rebarTab === "rebar" && (
-            <div className="flex gap-1">
-              <button className="btn-eng text-xs" onClick={autoFill}>按 22G101 自动补充</button>
+            <div className="flex gap-2">
+              <button className="btn-secondary text-xs" onClick={autoFill}>按 22G101 自动补充</button>
               <button className="btn-primary text-xs" onClick={addRebar}><Plus className="w-3 h-3" />添加</button>
             </div>
           )}
         </div>
-        <select className="input-eng" value={rebarTab} onChange={(e) => setRebarTab(e.target.value as RebarTab)}>
+        <select className="input-eng mb-3" value={rebarTab} onChange={(e) => setRebarTab(e.target.value as RebarTab)}>
           <option value="rebar">配筋</option>
           <option value="inSitu">原位标注</option>
           <option value="central">集中标注</option>
         </select>
 
         {rebarTab === "rebar" && (
-          <div className="space-y-2">
-            {c.rebars.length === 0 && <div className="text-xs text-eng-muted">暂无钢筋，点击上方“添加”或“自动补充”。</div>}
+          <div className="space-y-3">
+            {c.rebars.length === 0 && <div className="text-xs text-on-surface-variant py-2">暂无钢筋，点击上方“添加”或“自动补充”。</div>}
             {c.rebars.map((r) => (
-              <div key={r.id} className="panel p-2 space-y-1.5 bg-eng-panel2/30">
-                <div className="grid grid-cols-4 gap-1.5">
+              <div key={r.id} className="bg-surface-container-high/50 rounded-lg p-3 space-y-2 border border-outline-variant/10">
+                <div className="grid grid-cols-4 gap-2">
                   <select className="input-eng" value={r.role} onChange={(e) => updRebar(r.id, { role: e.target.value as any })}>
                     {(ROLES_BY_TYPE[c.type] ?? []).map((x) => <option key={x} value={x}>{roleName(x)}</option>)}
                   </select>
@@ -161,9 +162,9 @@ export default function ParamForm() {
                     {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                   <input type="number" className="input-eng" placeholder="直径" value={r.diameter} onChange={(e) => updRebar(r.id, { diameter: +e.target.value })} />
-                  <button className="btn-eng justify-center" onClick={() => delRebar(r.id)}><X className="w-3.5 h-3.5" /></button>
+                  <button className="btn-secondary justify-center text-xs" onClick={() => delRebar(r.id)}><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
                   <Field label="根数">
                     <input type="number" className="input-eng" value={r.count ?? 0} onChange={(e) => updRebar(r.id, { count: +e.target.value })} />
                   </Field>
@@ -175,7 +176,7 @@ export default function ParamForm() {
                   </Field>
                 </div>
                 {r.role === "STIRRUP" && (
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-2 gap-2">
                     <Field label="加密区间距(mm)">
                       <input type="number" className="input-eng" value={r.densifySpacing ?? 0}
                         onChange={(e) => updRebar(r.id, { densifySpacing: +e.target.value || undefined })} />
@@ -187,7 +188,7 @@ export default function ParamForm() {
                   </div>
                 )}
                 {r.role === "NEG" && (
-                  <div className="grid grid-cols-1 gap-1.5">
+                  <div className="grid grid-cols-1 gap-2">
                     <Field label="支座外伸长度(mm)">
                       <input type="number" className="input-eng" value={r.extension ?? 0}
                         onChange={(e) => updRebar(r.id, { extension: +e.target.value || undefined })} />
@@ -201,11 +202,11 @@ export default function ParamForm() {
 
         {rebarTab === "inSitu" && (
           <div className="space-y-2">
-            {c.rebars.length === 0 && <div className="text-xs text-eng-muted">暂无钢筋。</div>}
+            {c.rebars.length === 0 && <div className="text-xs text-on-surface-variant py-2">暂无钢筋。</div>}
             {c.rebars.map((r) => (
-              <div key={r.id} className="flex items-center gap-2">
-                <span className="text-xs text-eng-muted w-16 shrink-0">{roleName(r.role)}</span>
-                <span className="text-xs text-eng-muted w-12 shrink-0">{r.grade}-{r.diameter}</span>
+              <div key={r.id} className="flex items-center gap-2 bg-surface-container-high/50 rounded-lg p-2 border border-outline-variant/10">
+                <span className="text-xs text-on-surface-variant w-16 shrink-0">{roleName(r.role)}</span>
+                <span className="text-xs text-primary font-mono w-14 shrink-0">{r.grade}-{r.diameter}</span>
                 <input className="input-eng" value={r.label ?? ""} placeholder="如 2C25+2C22" onChange={(e) => updRebar(r.id, { label: e.target.value })} />
               </div>
             ))}
@@ -214,7 +215,7 @@ export default function ParamForm() {
 
         {rebarTab === "central" && (
           <div className="space-y-2">
-            <div className="text-xs text-eng-muted">
+            <div className="text-xs text-on-surface-variant">
               集中标注通常包含梁编号、截面尺寸、箍筋、通长筋等信息，用于施工图表达。
             </div>
             <textarea
@@ -235,28 +236,28 @@ function SectionShape({ c, setGeom }: { c: Component; setGeom: (k: keyof Compone
   const typeLabel = c.type === "BEAM" ? "矩形截面梁" : c.type === "COLUMN" ? "矩形截面柱" : c.type === "SLAB" ? "矩形板" : "圆形截面桩";
 
   return (
-    <div className="space-y-2">
-      <div className="text-xs text-eng-muted">{typeLabel}</div>
-      <div className="flex justify-center py-2">
+    <div className="space-y-3">
+      <div className="text-label-code text-on-surface-variant">{typeLabel}</div>
+      <div className="flex justify-center py-3 bg-surface-container-high/30 rounded-lg border border-outline-variant/10">
         {c.type === "PILE" ? (
           <div className="flex flex-col items-center gap-1">
             <svg width="80" height="80" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="35" fill="none" stroke="#94a3b8" strokeWidth="2" />
-              <text x="40" y="44" textAnchor="middle" fill="#e2e8f0" fontSize="12">D={geom.D}</text>
+              <circle cx="40" cy="40" r="35" fill="none" stroke="#8c909f" strokeWidth="2" />
+              <text x="40" y="44" textAnchor="middle" fill="#d4e4fa" fontSize="12" fontFamily="JetBrains Mono">D={geom.D}</text>
             </svg>
           </div>
         ) : c.type === "SLAB" ? (
           <div className="flex flex-col items-center gap-1">
             <svg width="100" height="60" viewBox="0 0 100 60">
-              <rect x="5" y="5" width="90" height="50" fill="none" stroke="#94a3b8" strokeWidth="2" />
-              <text x="50" y="35" textAnchor="middle" fill="#e2e8f0" fontSize="10">{geom.Lx} × {geom.Ly}</text>
+              <rect x="5" y="5" width="90" height="50" fill="none" stroke="#8c909f" strokeWidth="2" />
+              <text x="50" y="35" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.Lx} × {geom.Ly}</text>
             </svg>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-1">
             <svg width="100" height="80" viewBox="0 0 100 80">
-              <rect x="10" y="10" width="80" height="60" fill="none" stroke="#94a3b8" strokeWidth="2" />
-              <text x="50" y="42" textAnchor="middle" fill="#e2e8f0" fontSize="10">{geom.b} × {geom.h}</text>
+              <rect x="10" y="10" width="80" height="60" fill="none" stroke="#8c909f" strokeWidth="2" />
+              <text x="50" y="42" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.b} × {geom.h}</text>
             </svg>
           </div>
         )}
@@ -287,7 +288,7 @@ function SectionShape({ c, setGeom }: { c: Component; setGeom: (k: keyof Compone
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-[11px] text-eng-muted">{label}</span>
+      <span className="text-label-code text-on-surface-variant">{label}</span>
       {children}
     </label>
   );
