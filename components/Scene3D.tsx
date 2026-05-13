@@ -332,6 +332,9 @@ export default function Scene3D() {
 
     if (!blueprint || !blueprint.visible) return;
 
+    // eslint-disable-next-line no-console
+    console.log("开始加载蓝图:", { widthMm: blueprint.widthMm, heightMm: blueprint.heightMm, scale: blueprint.scale });
+
     const loader = new THREE.TextureLoader();
     loader.load(
       blueprint.imageUrl,
@@ -339,22 +342,26 @@ export default function Scene3D() {
         tex.colorSpace = THREE.SRGBColorSpace;
         const W = (blueprint.widthMm * blueprint.scale) / 1000;
         const H = (blueprint.heightMm * blueprint.scale) / 1000;
+        // eslint-disable-next-line no-console
+        console.log("蓝图尺寸 (米):", { W, H });
         const geo = new THREE.PlaneGeometry(W, H);
         const mat = new THREE.MeshBasicMaterial({
           map: tex,
           transparent: true,
-          opacity: 0.6,
+          opacity: 0.95,
           depthWrite: false,
           side: THREE.DoubleSide,
         });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.rotation.x = -Math.PI / 2;
         mesh.rotation.z = (blueprint.rotation * Math.PI) / 180;
-        mesh.position.set(blueprint.offsetX / 1000, 0.001, blueprint.offsetZ / 1000);
+        mesh.position.set(blueprint.offsetX / 1000, 0.005, blueprint.offsetZ / 1000);
         mesh.userData.kind = "blueprint";
-        mesh.renderOrder = -1;
+        mesh.renderOrder = 1;
         scene.add(mesh);
         blueprintMeshRef.current = mesh;
+        // eslint-disable-next-line no-console
+        console.log("蓝图 mesh 已添加到场景");
 
         // 蓝图 TransformControls
         if (!blueprint.locked) {
@@ -418,6 +425,7 @@ export default function Scene3D() {
   useEffect(() => {
     const dimGroup = dimGroupRef.current;
     if (!dimGroup) return;
+    // 清除旧标注
     while (dimGroup.children.length) {
       const child = dimGroup.children[0];
       dimGroup.remove(child);
@@ -435,55 +443,6 @@ export default function Scene3D() {
     for (const d of dims) dimGroup.add(d);
   }, [components, selectedId, showDimensions]);
 
-  // 蓝图首次导入后自动适配相机
-  const didFitRef = useRef(false);
-  useEffect(() => {
-    if (!blueprint || !blueprint.visible) {
-      didFitRef.current = false;
-      return;
-    }
-    if (didFitRef.current) return;
-    const camera = cameraRef.current;
-    const orbit = orbitRef.current;
-    if (!camera || !orbit) return;
-
-    const box = new THREE.Box3();
-    const W = (blueprint.widthMm * blueprint.scale) / 1000;
-    const H = (blueprint.heightMm * blueprint.scale) / 1000;
-    const cx = blueprint.offsetX / 1000;
-    const cz = blueprint.offsetZ / 1000;
-    box.expandByPoint(new THREE.Vector3(cx - W / 2, 0, cz - H / 2));
-    box.expandByPoint(new THREE.Vector3(cx + W / 2, 0, cz + H / 2));
-
-    for (const c of components) {
-      const g = c.geometry;
-      const p = c.placement;
-      const px = (p.x || 0) / 1000;
-      const py = (p.y || 0) / 1000;
-      const pz = (p.z || 0) / 1000;
-      let sx = 0, sy = 0, sz = 0;
-      if (c.type === "BEAM") { sx = (g.b ?? 300) / 1000; sy = (g.h ?? 600) / 1000; sz = (g.L ?? 6000) / 1000; }
-      else if (c.type === "COLUMN") { sx = (g.b ?? 500) / 1000; sy = (g.h ?? 500) / 1000; sz = (g.L ?? 3600) / 1000; }
-      else if (c.type === "SLAB") { sx = (g.Lx ?? 6000) / 1000; sy = (g.t ?? 120) / 1000; sz = (g.Ly ?? 4000) / 1000; }
-      else if (c.type === "PILE") { sx = (g.D ?? 800) / 1000; sy = (g.D ?? 800) / 1000; sz = (g.L ?? 12000) / 1000; }
-      box.expandByPoint(new THREE.Vector3(px - sx / 2, py - sy / 2, pz - sz / 2));
-      box.expandByPoint(new THREE.Vector3(px + sx / 2, py + sy / 2, pz + sz / 2));
-    }
-
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
-    if (maxDim > 0.01) {
-      const dist = maxDim * 1.2;
-      orbit.target.copy(center);
-      camera.position.set(center.x + dist, center.y + dist * 0.6, center.z + dist);
-      camera.lookAt(center);
-      camera.updateProjectionMatrix();
-      orbit.update();
-    }
-    didFitRef.current = true;
-  }, [blueprint, components]);
-
   return <div ref={mountRef} className="absolute inset-0" />;
 }
 
@@ -496,32 +455,23 @@ function buildDimensionLabels(c: Component): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   const g = c.geometry;
   const p = c.placement;
-  const rebars = c.rebars;
-  const cover = c.concrete.cover;
 
-  const textSprite = (lines: string[], pos: THREE.Vector3, scale = 0.22) => {
+  const textSprite = (text: string, pos: THREE.Vector3, scale = 0.25) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d")!;
-    const fontSize = 28;
-    const pad = 12;
+    const fontSize = 40;
     ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
-    const maxW = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
-    const lineH = fontSize + 6;
-    canvas.width = Math.ceil(maxW);
-    canvas.height = Math.ceil(lineH * lines.length + pad * 2);
-    // 半透明深蓝背景
-    ctx.fillStyle = "rgba(15,23,42,0.75)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const w = ctx.measureText(text).width + 20;
+    canvas.width = w;
+    canvas.height = fontSize + 20;
     ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    lines.forEach((line, i) => {
-      ctx.fillText(line, pad, pad + lineH * (i + 1) - 4);
-    });
+    ctx.fillText(text, 10, fontSize + 2);
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set((canvas.width / canvas.height) * scale, scale, 1);
+    sprite.scale.set((w / (fontSize + 20)) * scale, scale, 1);
     sprite.position.copy(pos);
     sprite.renderOrder = 1000;
     return sprite;
@@ -539,86 +489,23 @@ function buildDimensionLabels(c: Component): THREE.Object3D[] {
   const py = (p.y || 0) / 1000;
   const pz = (p.z || 0) / 1000;
 
-  // 辅助：格式化纵筋 label
-  const barLabel = (r: { label?: string; count?: number; diameter: number }) => {
-    if (r.label) return r.label;
-    const d = `Φ${r.diameter}`;
-    return r.count && r.count > 1 ? `${r.count}${d}` : d;
-  };
-  // 辅助：格式化箍筋/分布筋 label
-  const tieLabel = (r: { label?: string; diameter: number; spacing?: number; densifySpacing?: number; count?: number }) => {
-    if (r.label) return r.label;
-    const d = `Φ${r.diameter}`;
-    const leg = r.count ? `(${r.count})` : "";
-    if (r.densifySpacing && r.spacing) return `${d}@${r.densifySpacing}/${r.spacing}${leg}`;
-    if (r.spacing) return `${d}@${r.spacing}${leg}`;
-    return d;
-  };
-  // 辅助：收集某角色的钢筋，合并用 + 连接
-  const collect = (...roles: string[]) => {
-    const list = rebars.filter((r) => roles.includes(r.role));
-    if (list.length === 0) return "";
-    return list.map(barLabel).join("+");
-  };
-  const collectTie = (...roles: string[]) => {
-    const list = rebars.filter((r) => roles.includes(r.role));
-    if (list.length === 0) return "";
-    return list.map(tieLabel).join("+");
-  };
-
   if (c.type === "BEAM") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const top = collect("TOP");
-    const bot = collect("BOTTOM");
-    const side = collect("SIDE");
-    const stir = collectTie("STIRRUP");
-    const erect = collect("ERECTION");
-    const lines: string[] = [`截面 ${g.b ?? 0}×${g.h ?? 0}  L=${g.L ?? 0}`];
-    if (top) lines.push(`顶筋: ${top}`);
-    if (bot) lines.push(`底筋: ${bot}`);
-    if (side) lines.push(`腰筋: ${side}`);
-    if (stir) lines.push(`箍筋: ${stir}`);
-    if (erect) lines.push(`架立筋: ${erect}`);
-    lines.push(`保护层: ${cover}mm`);
-    out.push(textSprite(lines, new THREE.Vector3(px, py + h / 2 + 0.7, pz)));
-    out.push(line(new THREE.Vector3(px - L / 2, py + h / 2 + 0.4, pz), new THREE.Vector3(px + L / 2, py + h / 2 + 0.4, pz), 0xfacc15));
+    const offset = 0.6;
+    out.push(textSprite(`${(g.b ?? 0)}×${(g.h ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px, py + h / 2 + offset, pz)));
+    out.push(line(new THREE.Vector3(px - L / 2, py + h / 2 + offset * 0.6, pz), new THREE.Vector3(px + L / 2, py + h / 2 + offset * 0.6, pz), 0xfacc15));
   } else if (c.type === "COLUMN") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const main = collect("MAIN", "LONGITUDINAL");
-    const stir = collectTie("STIRRUP");
-    const stiff = collectTie("STIFFEN");
-    const lines: string[] = [`截面 ${g.b ?? 0}×${g.h ?? 0}  L=${g.L ?? 0}`];
-    if (main) lines.push(`纵筋: ${main}`);
-    if (stir) lines.push(`箍筋: ${stir}`);
-    if (stiff) lines.push(`加劲箍: ${stiff}`);
-    lines.push(`保护层: ${cover}mm`);
-    out.push(textSprite(lines, new THREE.Vector3(px, py + L / 2 + 0.5, pz)));
+    const offset = 0.5;
+    out.push(textSprite(`${(g.b ?? 0)}×${(g.h ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px + b / 2 + offset, py + L / 2, pz)));
   } else if (c.type === "SLAB") {
     const Lx = (g.Lx ?? 0) / 1000, Ly = (g.Ly ?? 0) / 1000, t = (g.t ?? 0) / 1000;
-    const neg = collectTie("NEG");
-    const dist = collectTie("DIST");
-    const construct = collect("CONSTRUCT");
-    const stool = collectTie("STOOL");
-    const lines: string[] = [`板 ${g.Lx ?? 0}×${g.Ly ?? 0}  厚${g.t ?? 0}`];
-    if (neg) lines.push(`负筋: ${neg}`);
-    if (dist) lines.push(`分布筋: ${dist}`);
-    if (construct) lines.push(`构造筋: ${construct}`);
-    if (stool) lines.push(`马凳筋: ${stool}`);
-    lines.push(`保护层: ${cover}mm`);
-    out.push(textSprite(lines, new THREE.Vector3(px, py + t / 2 + 0.6, pz)));
+    const offset = 0.5;
+    out.push(textSprite(`${(g.Lx ?? 0)}×${(g.Ly ?? 0)}×${(g.t ?? 0)}`, new THREE.Vector3(px, py + t / 2 + offset, pz)));
   } else if (c.type === "PILE") {
     const D = (g.D ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const main = collect("MAIN", "LONGITUDINAL");
-    const spiral = collectTie("SPIRAL");
-    const stiff = collectTie("STIFFEN");
-    const sonic = collect("SONIC");
-    const lines: string[] = [`桩 D${g.D ?? 0}  L=${g.L ?? 0}`];
-    if (main) lines.push(`主筋: ${main}`);
-    if (spiral) lines.push(`螺旋箍: ${spiral}`);
-    if (stiff) lines.push(`加劲箍: ${stiff}`);
-    if (sonic) lines.push(`声测管: ${sonic}`);
-    lines.push(`保护层: ${cover}mm`);
-    out.push(textSprite(lines, new THREE.Vector3(px + D / 2 + 0.4, py + L / 2, pz)));
+    const offset = 0.5;
+    out.push(textSprite(`D${(g.D ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px + D / 2 + offset, py + L / 2, pz)));
   }
 
   return out;

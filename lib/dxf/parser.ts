@@ -198,8 +198,8 @@ export async function rasterizeSvg(svg: string, maxPx = 2048): Promise<{ dataUrl
       const cv = document.createElement("canvas");
       cv.width = w; cv.height = h;
       const ctx = cv.getContext("2d")!;
-      // 透明背景，不填充白色，避免遮挡 3D 构件
-      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
       resolve({ dataUrl: cv.toDataURL("image/png"), w, h });

@@ -373,41 +373,60 @@ function drawDims(
   elems: React.ReactNode[], c: Component, sw: number, sh: number, cover: number,
   scale: number, x0: number, y0: number, w: number, h: number, cx: number, cy: number,
 ) {
-  const offset = 24;
-  const tick = 5;
+  const offset = 30;
+  const arrowSize = 8;
+
+  // 箭头辅助函数
+  const drawArrow = (x: number, y: number, angle: number, key: string) => {
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const x1 = x - arrowSize * cos + arrowSize * 0.4 * sin;
+    const y1 = y - arrowSize * sin - arrowSize * 0.4 * cos;
+    const x2 = x - arrowSize * cos - arrowSize * 0.4 * sin;
+    const y2 = y - arrowSize * sin + arrowSize * 0.4 * cos;
+    elems.push(<path key={key} d={`M${x1},${y1} L${x},${y} L${x2},${y2}`} fill="#64748b" stroke="#64748b" strokeWidth={1} />);
+  };
 
   if (c.type === "PILE") {
-    // 直径标注：水平引出线
+    // 直径标注：水平引出线带箭头
     const y = cy + w / 2 + offset;
-    elems.push(<line key="d1" x1={cx - w / 2} y1={y - tick} x2={cx - w / 2} y2={y + tick} stroke="#64748b" strokeWidth={1} />);
-    elems.push(<line key="d2" x1={cx + w / 2} y1={y - tick} x2={cx + w / 2} y2={y + tick} stroke="#64748b" strokeWidth={1} />);
-    elems.push(<line key="d3" x1={cx - w / 2} y1={y} x2={cx + w / 2} y2={y} stroke="#64748b" strokeWidth={0.8} />);
-    elems.push(<text key="dt" x={cx} y={y + 14} textAnchor="middle" fontSize={12} fill="#475569">D={sw}</text>);
-    // 保护层
-    elems.push(<text key="covt" x={cx + w / 2 + 10} y={cy} textAnchor="start" fontSize={11} fill="#64748b">c={cover}</text>);
+    const leftX = cx - w / 2 - 10, rightX = cx + w / 2 + 10;
+    elems.push(<line key="d1" x1={leftX} y1={y} x2={rightX} y2={y} stroke="#64748b" strokeWidth={1} />);
+    drawArrow(leftX, y, 0, "da1");
+    drawArrow(rightX, y, Math.PI, "da2");
+    elems.push(<text key="dt" x={cx} y={y + 16} textAnchor="middle" fontSize={12} fill="#475569">D={sw}</text>);
+    // 保护层短线标注
+    const covY = cy - w / 2 + cover * scale / 2;
+    elems.push(<line key="covl1" x1={cx - w / 2} y1={cy} x2={cx - w / 2} y2={cy - w / 2} stroke="#64748b" strokeWidth={1} />);
+    elems.push(<line key="covl2" x1={cx - w / 2} y1={covY} x2={cx - w / 2 + 15} y2={covY} stroke="#64748b" strokeWidth={1} />);
+    elems.push(<text key="covt" x={cx - w / 2 + 18} y={covY + 4} textAnchor="start" fontSize={11} fill="#64748b">c={cover}</text>);
     return;
   }
 
-  // 水平尺寸线（宽度）
+  // 水平尺寸线（宽度）带箭头
   const yBot = y0 + h + offset;
-  elems.push(<line key="dw1" x1={x0} y1={yBot - tick} x2={x0} y2={yBot + tick} stroke="#64748b" strokeWidth={1} />);
-  elems.push(<line key="dw2" x1={x0 + w} y1={yBot - tick} x2={x0 + w} y2={yBot + tick} stroke="#64748b" strokeWidth={1} />);
-  elems.push(<line key="dw3" x1={x0} y1={yBot} x2={x0 + w} y2={yBot} stroke="#64748b" strokeWidth={0.8} />);
-  elems.push(<text key="dwt" x={x0 + w / 2} y={yBot + 14} textAnchor="middle" fontSize={12} fill="#475569">{c.type === "SLAB" ? `Lx=${sw}` : `b=${sw}`}</text>);
+  const leftX = x0 - 10, rightX = x0 + w + 10;
+  elems.push(<line key="dw" x1={leftX} y1={yBot} x2={rightX} y2={yBot} stroke="#64748b" strokeWidth={1} />);
+  drawArrow(leftX, yBot, 0, "daw1");
+  drawArrow(rightX, yBot, Math.PI, "daw2");
+  elems.push(<text key="dwt" x={cx} y={yBot + 16} textAnchor="middle" fontSize={12} fill="#475569">{c.type === "SLAB" ? `Lx=${sw}` : `b=${sw}`}</text>);
 
-  // 垂直尺寸线（高度）
+  // 垂直尺寸线（高度）带箭头
   const xRight = x0 + w + offset;
-  elems.push(<line key="dh1" x1={xRight - tick} y1={y0} x2={xRight + tick} y2={y0} stroke="#64748b" strokeWidth={1} />);
-  elems.push(<line key="dh2" x1={xRight - tick} y1={y0 + h} x2={xRight + tick} y2={y0 + h} stroke="#64748b" strokeWidth={1} />);
-  elems.push(<line key="dh3" x1={xRight} y1={y0} x2={xRight} y2={y0 + h} stroke="#64748b" strokeWidth={0.8} />);
+  const topY = y0 - 10, botY = y0 + h + 10;
+  elems.push(<line key="dh" x1={xRight} y1={topY} x2={xRight} y2={botY} stroke="#64748b" strokeWidth={1} />);
+  drawArrow(xRight, topY, Math.PI / 2, "dah1");
+  drawArrow(xRight, botY, -Math.PI / 2, "dah2");
   const labelH = c.type === "SLAB" ? `t=${sh}` : `h=${sh}`;
-  elems.push(<text key="dht" x={xRight + 4} y={y0 + h / 2 + 4} textAnchor="start" fontSize={12} fill="#475569" transform={`rotate(-90, ${xRight + 4}, ${y0 + h / 2})`}>{labelH}</text>);
+  elems.push(<text key="dht" x={xRight + 16} y={cy} textAnchor="start" fontSize={12} fill="#475569" transform={`rotate(-90, ${xRight + 16}, ${cy})`}>{labelH}</text>);
 
-  // 保护层标注
-  const covOff = 16;
-  const cx2 = x0 - covOff;
-  elems.push(<line key="covl" x1={x0} y1={y0 + h / 2} x2={cx2} y2={y0 + h / 2} stroke="#64748b" strokeWidth={0.8} />);
-  elems.push(<text key="covt" x={cx2 - 2} y={y0 + h / 2 + 4} textAnchor="end" fontSize={11} fill="#64748b">c={cover}</text>);
+  // 保护层短线标注（左上角）
+  const covPx = cover * scale;
+  const covX = x0 + covPx / 2, covY = y0 + covPx / 2;
+  elems.push(<line key="covl1" x1={x0} y1={covY} x2={x0 + covPx} y2={covY} stroke="#64748b" strokeWidth={1} />);
+  elems.push(<line key="covl2" x1={covX} y1={y0} x2={covX} y2={y0 + covPx} stroke="#64748b" strokeWidth={1} />);
+  elems.push(<line key="covl3" x1={covX} y1={covY} x2={covX - 12} y2={covY} stroke="#64748b" strokeWidth={1} />);
+  elems.push(<line key="covl4" x1={covX - 12} y1={covY} x2={covX - 12} y2={covY - 8} stroke="#64748b" strokeWidth={1} />);
+  elems.push(<text key="covt" x={covX - 15} y={covY - 10} textAnchor="end" fontSize={11} fill="#64748b">c={cover}</text>);
 }
 
 // ======== 钢筋规格文字标注 ========
@@ -419,13 +438,13 @@ function drawRebarSpecs(
 ) {
   // 按角色分组，去重后写标签
   const seen = new Set<string>();
-  const specs: { role: string; text: string; xm: number; ym: number }[] = [];
+  const specs: { role: string; text: string; xm: number; ym: number; anchor?: "start" | "middle" | "end" }[] = [];
 
-  const addSpec = (role: string, text: string, xm: number, ym: number) => {
+  const addSpec = (role: string, text: string, xm: number, ym: number, anchor?: "start" | "middle" | "end") => {
     const k = `${role}-${text}`;
     if (seen.has(k)) return;
     seen.add(k);
-    specs.push({ role, text, xm, ym });
+    specs.push({ role, text, xm, ym, anchor });
   };
 
   rebars.forEach(r => {
@@ -438,51 +457,56 @@ function drawRebarSpecs(
 
     if (c.type === "BEAM") {
       if (r.role === "STIRRUP") {
-        addSpec("STIRRUP", label || `${densify ? `${dia}@${densify}/${spacing}` : `${dia}@${spacing}`}`, sw / 2, cover + (sh - 2 * cover) * 0.5);
+        addSpec("STIRRUP", label || `${densify ? `${dia}@${densify}/${spacing}` : `${dia}@${spacing}`}`, sw / 2, cover + (sh - 2 * cover) * 0.5, "middle");
       } else if (["TOP", "LONGITUDINAL", "ERECTION", "BENT", "ADDITIONAL"].includes(r.role)) {
-        addSpec(r.role, label || `${count}${grade}-${dia}`, sw / 2, cover / 2);
+        addSpec(r.role, label || `${count}${grade}-${dia}`, sw - cover / 2, cover / 2, "end");
       } else if (r.role === "BOTTOM") {
-        addSpec("BOTTOM", label || `${count}${grade}-${dia}`, sw / 2, sh - cover / 2);
+        addSpec("BOTTOM", label || `${count}${grade}-${dia}`, sw - cover / 2, sh - cover / 2, "end");
       } else if (r.role === "SIDE") {
-        addSpec("SIDE", label || `${count}${grade}-${dia}`, cover / 2, sh / 2);
+        addSpec("SIDE", label || `${count}${grade}-${dia}`, cover / 2, sh / 2, "end");
       } else if (r.role === "TIE") {
-        addSpec("TIE", label || `${count}${grade}-${dia}`, sw - cover / 2, sh / 2);
+        addSpec("TIE", label || `${count}${grade}-${dia}`, sw - cover / 2, sh / 2, "end");
       }
     } else if (c.type === "COLUMN") {
       if (r.role === "STIRRUP") {
-        addSpec("STIRRUP", label || `${dia}@${spacing}`, sw / 2, sh / 2);
+        addSpec("STIRRUP", label || `${dia}@${spacing}`, sw / 2, sh / 2, "middle");
       } else if (["MAIN", "CONSTRUCT_COL", "TIE"].includes(r.role)) {
-        addSpec(r.role, label || `${count}${grade}-${dia}`, sw / 2, cover / 2);
+        addSpec(r.role, label || `${count}${grade}-${dia}`, sw - cover / 2, cover / 2, "end");
       }
     } else if (c.type === "SLAB") {
       if (r.role === "TOP") {
-        addSpec("TOP", label || `${grade}-${dia}@${spacing}`, sw / 2, cover / 2);
+        addSpec("TOP", label || `${grade}-${dia}@${spacing}`, sw / 2, cover / 2, "middle");
       } else if (r.role === "BOTTOM") {
-        addSpec("BOTTOM", label || `${grade}-${dia}@${spacing}`, sw / 2, sh - cover / 2);
+        addSpec("BOTTOM", label || `${grade}-${dia}@${spacing}`, sw / 2, sh - cover / 2, "middle");
       } else if (r.role === "DIST") {
-        addSpec("DIST", label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2);
+        addSpec("DIST", label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2, "middle");
       } else if (r.role === "NEG") {
-        addSpec("NEG", label || `${grade}-${dia}@${spacing} 外伸${r.extension ?? 0}`, sw / 2, cover / 2 + 12);
+        addSpec("NEG", label || `${grade}-${dia}@${spacing} 外伸${r.extension ?? 0}`, sw / 2, cover / 2 + 12, "middle");
       } else if (["CONSTRUCT", "STOOL"].includes(r.role)) {
-        addSpec(r.role, label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2 + 12);
+        addSpec(r.role, label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2 + 12, "middle");
       }
     } else if (c.type === "PILE") {
       if (["SPIRAL", "STIFFEN", "STIRRUP"].includes(r.role)) {
-        addSpec(r.role, label || `${dia}@${spacing}`, sw / 2, sh / 2);
+        addSpec(r.role, label || `${dia}@${spacing}`, sw / 2, sh / 2, "middle");
       } else if (r.role === "MAIN") {
-        addSpec("MAIN", label || `${count}${grade}-${dia}`, sw / 2, cover / 2);
+        addSpec("MAIN", label || `${count}${grade}-${dia}`, sw - cover / 2, cover / 2, "end");
       } else if (r.role === "SONIC") {
-        addSpec("SONIC", label || `${count}Φ${dia} 声测管`, sw / 2, sh * 0.35);
+        addSpec("SONIC", label || `${count}Φ${dia} 声测管`, sw / 2, sh * 0.35, "middle");
       }
     }
   });
 
   specs.forEach((s, i) => {
     const p = toSvg(s.xm, s.ym);
-    // 避免标签重叠：简单用偏移
+    const dx = s.anchor === "end" ? -8 : s.anchor === "start" ? 8 : 0;
     const dy = (i % 3 - 1) * 14;
+    // 添加引线
+    if (s.anchor === "end") {
+      const lineLen = 12;
+      elems.push(<line key={`spec-line-${i}`} x1={p.x} y1={p.y + dy} x2={p.x + lineLen} y2={p.y + dy} stroke="#64748b" strokeWidth={0.8} />);
+    }
     elems.push(
-      <text key={`spec-${i}`} x={p.x} y={p.y + dy} textAnchor="middle" fontSize={11} fill="#475569" fontFamily="sans-serif">
+      <text key={`spec-${i}`} x={p.x + dx} y={p.y + dy} textAnchor={s.anchor ?? "middle"} fontSize={11} fill="#475569" fontFamily="sans-serif">
         {roleName(s.role)} {s.text}
       </text>
     );
