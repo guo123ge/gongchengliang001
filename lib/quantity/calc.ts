@@ -79,7 +79,7 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
   if (c.type === "PILE") {
     const L = g.L ?? 0;
     const D = g.D ?? 0;
-    if (r.role === "SPIRAL" || r.role === "STIRRUP") {
+    if (r.role === "SPIRAL" || r.role === "STIFFEN" || r.role === "STIRRUP") {
       const per = Math.PI * (D - 2 * cover);
       const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
       return { totalLenM: (per * n) / 1000, countTotal: n };

@@ -19,6 +19,7 @@ export interface DxfParseResult {
   endpoints: DxfEndpoint[];
   counts: Record<string, number>;
   total: number;
+  unitScale: number; // DXF 原始单位 → mm 的乘数
 }
 
 const DEFAULT_STROKE = "#1f2937";
@@ -31,6 +32,12 @@ function bboxUpdate(b: DxfBBox, x: number, y: number) {
   if (y > b.maxY) b.maxY = y;
 }
 
+const UNIT_TO_MM: Record<number, number> = {
+  0: 1, 1: 25.4, 2: 304.8, 3: 914.4, 4: 1, 5: 10,
+  6: 1000, 7: 1000000, 8: 25.4, 9: 0.0254, 10: 10,
+  11: 1000, 12: 1000000, 13: 1609344, 14: 1852000,
+};
+
 export function parseDxf(text: string): DxfParseResult {
   const parser = new (DxfParser as any)();
   const dxf: any = parser.parseSync(text);
@@ -42,6 +49,12 @@ export function parseDxf(text: string): DxfParseResult {
   const bbox: DxfBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   const endpoints: DxfEndpoint[] = [];
   const seen = new Set<string>();
+
+  // 读取 DXF 单位（默认 mm = 4）
+  const header = dxf?.header ?? {};
+  const insUnits = header?.$INSUNITS ?? header?.insunits ?? 4;
+  const unitScale = UNIT_TO_MM[insUnits] ?? 1;
+
   const addEndpoint = (x: number, y: number) => {
     if (!isFinite(x) || !isFinite(y)) return;
     const key = `${Math.round(x * 10)}|${Math.round(y * 10)}`;
@@ -102,7 +115,7 @@ export function parseDxf(text: string): DxfParseResult {
       layerNames.add(e.layer);
     }
   }
-  return { entities, layers, bbox, endpoints, counts, total: entities.length };
+  return { entities, layers, bbox, endpoints, counts, total: entities.length, unitScale };
 }
 
 /** 渲染（可选过滤图层） */
@@ -185,8 +198,8 @@ export async function rasterizeSvg(svg: string, maxPx = 2048): Promise<{ dataUrl
       const cv = document.createElement("canvas");
       cv.width = w; cv.height = h;
       const ctx = cv.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
+      // 透明背景，不填充白色，避免遮挡 3D 构件
+      ctx.clearRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
       resolve({ dataUrl: cv.toDataURL("image/png"), w, h });

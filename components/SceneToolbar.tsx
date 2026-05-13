@@ -1,12 +1,14 @@
 "use client";
-import { Eye, EyeOff, Scissors, Move3d, RotateCw, Image as ImageIcon, Trash2, Magnet, Lock, Unlock } from "lucide-react";
+import { Eye, EyeOff, Scissors, Move3d, RotateCw, Image as ImageIcon, Trash2, Magnet, Lock, Unlock, Ruler } from "lucide-react";
 import { useStore } from "@/lib/store";
 
 export default function SceneToolbar() {
   const showConcrete = useStore((s) => s.showConcrete);
   const showRebar = useStore((s) => s.showRebar);
+  const showDimensions = useStore((s) => s.showDimensions);
   const toggleConcrete = useStore((s) => s.toggleConcrete);
   const toggleRebar = useStore((s) => s.toggleRebar);
+  const toggleDimensions = useStore((s) => s.toggleDimensions);
   const clip = useStore((s) => s.clip);
   const setClip = useStore((s) => s.setClip);
   const gizmoMode = useStore((s) => s.gizmoMode);
@@ -23,6 +25,9 @@ export default function SceneToolbar() {
       </button>
       <button className="btn-eng text-xs" onClick={toggleRebar}>
         {showRebar ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />} 钢筋
+      </button>
+      <button className={showDimensions ? "btn-primary text-xs" : "btn-eng text-xs"} onClick={toggleDimensions} title="切换尺寸标注显隐">
+        <Ruler className="w-3.5 h-3.5" />尺寸
       </button>
       <div className="h-4 w-px bg-eng-border" />
       <button
@@ -54,8 +59,7 @@ export default function SceneToolbar() {
             onChange={(e) => setClip({ axis: e.target.value as any })}>
             <option value="x">X</option><option value="y">Y</option><option value="z">Z</option>
           </select>
-          <input type="number" className="input-eng !py-0.5 !px-1 text-xs w-24" value={clip.position}
-            onChange={(e) => setClip({ position: +e.target.value })} placeholder="位置 mm" />
+          <ClipSlider />
         </>
       )}
       {blueprint && (
@@ -103,6 +107,50 @@ export default function SceneToolbar() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+function ClipSlider() {
+  const clip = useStore((s) => s.clip);
+  const setClip = useStore((s) => s.setClip);
+  const components = useStore((s) => s.components);
+
+  // 根据构件包围盒计算滑移条范围
+  const ranges = components.map((c) => {
+    const p = c.placement;
+    const g = c.geometry;
+    let min = 0, max = 0;
+    if (clip.axis === "x") {
+      const hw = (g.b ?? g.Lx ?? g.D ?? 0) / 2;
+      min = p.x - hw; max = p.x + hw;
+    } else if (clip.axis === "y") {
+      const hh = (g.h ?? g.t ?? g.L ?? 0) / 2;
+      min = p.y - hh; max = p.y + hh;
+    } else {
+      const hd = (g.Ly ?? g.L ?? g.h ?? 0) / 2;
+      min = p.z - hd; max = p.z + hd;
+    }
+    return { min, max };
+  });
+
+  const globalMin = ranges.length > 0 ? Math.min(...ranges.map((r) => r.min)) : -5000;
+  const globalMax = ranges.length > 0 ? Math.max(...ranges.map((r) => r.max)) : 5000;
+  const pos = Math.min(Math.max(clip.position, globalMin), globalMax);
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="range"
+        className="w-24 h-1.5 appearance-none rounded bg-eng-border accent-eng-accent cursor-pointer"
+        min={globalMin}
+        max={globalMax}
+        step={10}
+        value={pos}
+        onChange={(e) => setClip({ position: +e.target.value })}
+        title="拖拽调整剖切面位置"
+      />
+      <span className="text-[10px] text-eng-muted w-10 text-right tabular">{pos}</span>
     </div>
   );
 }

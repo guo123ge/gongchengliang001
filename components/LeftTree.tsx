@@ -1,5 +1,5 @@
 "use client";
-import { Plus, Trash2, Box, Square, Columns, Circle } from "lucide-react";
+import { Plus, Trash2, Box, Square, Columns, Circle, PanelLeftOpen, PanelLeft } from "lucide-react";
 import { useStore } from "@/lib/store";
 import type { ComponentType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,12 @@ const TYPES: { t: ComponentType; label: string; icon: any }[] = [
   { t: "PILE", label: "桩基", icon: Circle },
 ];
 
-export default function LeftTree() {
+interface Props {
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export default function LeftTree({ collapsed, onToggle }: Props) {
   const components = useStore((s) => s.components);
   const selectedId = useStore((s) => s.selectedId);
   const addComponent = useStore((s) => s.addComponent);
@@ -23,10 +28,31 @@ export default function LeftTree() {
     items: components.filter((c) => c.type === t.t),
   }));
 
+  if (collapsed) {
+    return (
+      <aside className="w-full h-full border-r border-eng-border bg-eng-panel flex flex-col items-center py-2 gap-2">
+        <button onClick={onToggle} className="p-1 rounded hover:bg-eng-panel2 text-eng-muted" title="展开">
+          <PanelLeftOpen className="w-4 h-4" />
+        </button>
+        {TYPES.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.t} className="p-1 rounded hover:bg-eng-panel2 text-eng-muted" title={t.label} onClick={() => addComponent(t.t)}>
+              <Icon className="w-4 h-4" />
+            </button>
+          );
+        })}
+      </aside>
+    );
+  }
+
   return (
-    <aside className="w-64 shrink-0 h-full border-r border-eng-border bg-eng-panel flex flex-col">
-      <div className="px-3 py-2 border-b border-eng-border text-xs uppercase tracking-wider text-eng-muted">
-        构件树
+    <aside className="w-full h-full border-r border-eng-border bg-eng-panel flex flex-col">
+      <div className="px-3 py-2 border-b border-eng-border flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wider text-eng-muted">构件树</span>
+        <button onClick={onToggle} className="p-1 rounded hover:bg-eng-panel2 text-eng-muted" title="收起">
+          <PanelLeft className="w-3.5 h-3.5" />
+        </button>
       </div>
       <div className="p-2 grid grid-cols-2 gap-2">
         {TYPES.map((t) => {

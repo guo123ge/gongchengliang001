@@ -15,6 +15,7 @@ export default function DrawingImport({ onClose }: { onClose: () => void }) {
   const [activeLayers, setActiveLayers] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [fileRef, setFileRef] = useState<File | null>(null);
   const setBlueprint = useStore((s) => s.setBlueprint);
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
@@ -49,9 +50,11 @@ export default function DrawingImport({ onClose }: { onClose: () => void }) {
     } else if (f.type.startsWith("image/")) {
       setMode("image");
       setUrl(URL.createObjectURL(f));
+      setFileRef(f);
     } else if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
       setMode("pdf");
       setUrl(URL.createObjectURL(f));
+      setFileRef(f);
     } else {
       setMode("none");
       setErr("未识别的文件类型");
@@ -66,7 +69,58 @@ export default function DrawingImport({ onClose }: { onClose: () => void }) {
     });
   };
 
+  const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const sendImageToScene = async () => {
+    if (!fileRef || mode !== "image") return;
+    setBusy(true);
+    try {
+      const dataUrl = await fileToDataUrl(fileRef);
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = (e) => reject(e);
+      });
+      // 默认 1px = 1mm，用户可在场景中通过 scale 调整
+      const widthMm = img.width;
+      const heightMm = img.height;
+      setBlueprint({
+        imageUrl: dataUrl,
+        widthMm,
+        heightMm,
+        offsetX: 0,
+        offsetZ: 0,
+        rotation: 0,
+        scale: 1,
+        visible: true,
+        bbox: { minX: 0, minY: 0, maxX: widthMm, maxY: heightMm },
+        endpoints: [],
+        layers: [],
+        activeLayers: [],
+        snapEnabled: false,
+        locked: false,
+      });
+      onClose();
+    } catch (e: any) {
+      setErr(`图片处理失败：${e?.message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sendToScene = async () => {
+    if (mode === "image") {
+      await sendImageToScene();
+      return;
+    }
     if (!dxf) return;
     setBusy(true);
     try {
@@ -78,7 +132,7 @@ export default function DrawingImport({ onClose }: { onClose: () => void }) {
         offsetX: 0,
         offsetZ: 0,
         rotation: 0,
-        scale: 1,
+        scale: dxf.unitScale,
         visible: true,
         bbox: dxf.bbox,
         endpoints: dxf.endpoints,
@@ -110,20 +164,26 @@ export default function DrawingImport({ onClose }: { onClose: () => void }) {
           </button>
           <span className="text-xs text-eng-muted">{name}</span>
           <div className="flex-1" />
-          {mode === "dxf" && dxf && (
-            <button className="btn-primary" onClick={sendToScene} disabled={busy || activeLayers.size === 0}>
+          {(mode === "dxf" && dxf) || mode === "image" ? (
+            <button className="btn-primary" onClick={sendToScene}
+              disabled={busy || (mode === "dxf" && activeLayers.size === 0)}>
               <Send className="w-4 h-4" />发送到 3D 场景
             </button>
-          )}
+          ) : mode === "pdf" ? (
+            <span className="text-xs text-eng-muted">PDF 暂不支持直接导入，请先转换为图片</span>
+          ) : null}
         </div>
         {err && <div className="text-xs text-eng-err mb-2">{err}</div>}
         {mode === "dxf" && dxf && (
           <div className="text-xs text-eng-muted mb-2 flex gap-3 items-center">
             <Layers className="w-3.5 h-3.5" />
-            <span>尺寸：{(dxf.bbox.maxX - dxf.bbox.minX).toFixed(0)} × {(dxf.bbox.maxY - dxf.bbox.minY).toFixed(0)} mm</span>
+            <span>尺寸：{((dxf.bbox.maxX - dxf.bbox.minX) * dxf.unitScale).toFixed(0)} × {((dxf.bbox.maxY - dxf.bbox.minY) * dxf.unitScale).toFixed(0)} mm（单位系数 {dxf.unitScale}）</span>
             <span>实体 {dxf.total} | 端点 {dxf.endpoints.length}</span>
             {Object.entries(dxf.counts).slice(0, 5).map(([k, v]) => <span key={k}>{k}: {v}</span>)}
           </div>
+        )}
+        {mode === "image" && (
+          <div className="text-xs text-eng-muted mb-2">图片导入：默认 1 像素 = 1 mm，导入后可在工具栏调整缩放比例</div>
         )}
         <div className="flex-1 flex gap-3 min-h-0">
           {mode === "dxf" && dxf && (

@@ -104,8 +104,8 @@ function rebarLines(c: Component, r: Rebar): THREE.Object3D | null {
   if (c.type === "BEAM") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
     const ix = b / 2 - cover, iy = h / 2 - cover, ax = L / 2;
-    if (r.role === "TOP" || r.role === "BOTTOM") {
-      const y = r.role === "TOP" ? iy : -iy;
+    if (r.role === "TOP" || r.role === "BOTTOM" || r.role === "LONGITUDINAL" || r.role === "ERECTION" || r.role === "BENT" || r.role === "TIE" || r.role === "ADDITIONAL") {
+      const y = r.role === "TOP" || r.role === "ERECTION" ? iy : -iy;
       const n = Math.max(2, r.count ?? 2);
       for (let i = 0; i < n; i++) {
         const z = -ix + (n > 1 ? (2 * ix * i) / (n - 1) : 0);
@@ -129,7 +129,7 @@ function rebarLines(c: Component, r: Rebar): THREE.Object3D | null {
   } else if (c.type === "COLUMN") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
     const ix = b / 2 - cover, iz = h / 2 - cover, ay = L / 2;
-    if (r.role === "MAIN") {
+    if (r.role === "MAIN" || r.role === "CONSTRUCT_COL" || r.role === "TIE") {
       const n = Math.max(4, r.count ?? 4);
       const perSide = Math.ceil(n / 4);
       const positions: [number, number][] = [];
@@ -179,6 +179,16 @@ function rebarLines(c: Component, r: Rebar): THREE.Object3D | null {
           ]), negMat));
         }
       }
+    } else if (r.role === "CONSTRUCT" || r.role === "STOOL") {
+      const y = r.role === "CONSTRUCT" ? t / 2 - cover : -t / 2 + cover;
+      if (r.spacing) {
+        const n = Math.max(2, Math.floor((Ly * 1000) / r.spacing) + 1);
+        for (let i = 0; i < n; i++) {
+          const z = -Ly / 2 + (n > 1 ? (Ly * i) / (n - 1) : 0);
+          const pts = [new THREE.Vector3(-Lx / 2, y, z), new THREE.Vector3(Lx / 2, y, z)];
+          group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        }
+      }
     } else {
       const y = r.role === "TOP" ? t / 2 - cover : -t / 2 + cover;
       if (r.spacing) {
@@ -201,7 +211,7 @@ function rebarLines(c: Component, r: Rebar): THREE.Object3D | null {
         const pts = [new THREE.Vector3(x, -L / 2, z), new THREE.Vector3(x, L / 2, z)];
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
       }
-    } else if (r.role === "SPIRAL" || r.role === "STIRRUP") {
+    } else if (r.role === "SPIRAL" || r.role === "STIFFEN" || r.role === "STIRRUP") {
       const sp = (r.spacing ?? 200) / 1000;
       const turns = L / sp;
       const seg = Math.max(32, Math.floor(turns * 24));
@@ -212,6 +222,15 @@ function rebarLines(c: Component, r: Rebar): THREE.Object3D | null {
         pts.push(new THREE.Vector3(rad * Math.cos(ang), -L / 2 + t * L, rad * Math.sin(ang)));
       }
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+    } else if (r.role === "SONIC") {
+      const n = Math.max(2, r.count ?? 3);
+      const sonicMat = new THREE.LineBasicMaterial({ color: 0xfacc15 });
+      for (let i = 0; i < n; i++) {
+        const theta = (2 * Math.PI * i) / n;
+        const x = rad * Math.cos(theta), z = rad * Math.sin(theta);
+        const pts = [new THREE.Vector3(x, -L / 2, z), new THREE.Vector3(x, L / 2, z)];
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), sonicMat));
+      }
     }
   }
 

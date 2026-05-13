@@ -11,7 +11,10 @@ export type EnvClass = "Ia" | "Ib" | "IIa" | "IIb" | "IIIa" | "IIIb";
 /** 钢筋描述（简化版原位标注） */
 export interface Rebar {
   id: string;
-  role: "TOP" | "BOTTOM" | "SIDE" | "STIRRUP" | "MAIN" | "DIST" | "SPIRAL" | "NEG";
+  role: "TOP" | "BOTTOM" | "SIDE" | "STIRRUP" | "MAIN" | "DIST" | "SPIRAL" | "NEG" |
+        "LONGITUDINAL" | "ERECTION" | "BENT" | "TIE" | "ADDITIONAL" |
+        "CONSTRUCT" | "STOOL" |
+        "CONSTRUCT_COL" | "STIFFEN" | "SONIC";
   grade: RebarGrade;
   diameter: number;   // mm
   count?: number;     // 根数（纵筋）
@@ -65,6 +68,7 @@ export interface Component {
   concrete: ConcreteSpec;
   rebars: Rebar[];
   placement: Placement;
+  centralLabel?: string;
 }
 
 export type Severity = "pass" | "warn" | "error";

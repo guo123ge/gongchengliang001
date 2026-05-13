@@ -37,6 +37,8 @@ interface State {
   clip: ClipPlane;
   showRebar: boolean;
   showConcrete: boolean;
+  showDimensions: boolean;
+  toggleDimensions: () => void;
   aiOpen: boolean;
   gizmoMode: "translate" | "rotate";
   setGizmoMode: (m: "translate" | "rotate") => void;
@@ -70,6 +72,7 @@ function defaultComponent(type: ComponentType): Component {
     },
     rebars: [],
     placement: { x: 0, y: 0, z: 0, rot: 0 },
+    centralLabel: "",
   };
   let geometry: Component["geometry"];
   switch (type) {
@@ -89,6 +92,8 @@ export const useStore = create<State>((set, get) => ({
   clip: { axis: "x", position: 0, enabled: false },
   showRebar: true,
   showConcrete: true,
+  showDimensions: true,
+  toggleDimensions: () => set((s) => ({ showDimensions: !s.showDimensions })),
   aiOpen: false,
   gizmoMode: "translate",
   setGizmoMode: (m) => set({ gizmoMode: m }),
