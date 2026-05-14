@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Rebar.Quant Pro - BIM Visualization Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed": "#002113",
+                      "secondary": "#ffb95f",
+                      "on-surface-variant": "#c2c6d6",
+                      "surface-variant": "#273647",
+                      "on-tertiary-container": "#00311f",
+                      "surface-dim": "#051424",
+                      "primary-fixed": "#d8e2ff",
+                      "on-error-container": "#ffdad6",
+                      "surface-container-low": "#0d1c2d",
+                      "inverse-surface": "#d4e4fa",
+                      "on-primary-container": "#00285d",
+                      "on-error": "#690005",
+                      "primary": "#adc6ff",
+                      "surface-tint": "#adc6ff",
+                      "on-primary": "#002e6a",
+                      "surface-container-lowest": "#010f1f",
+                      "primary-fixed-dim": "#adc6ff",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "on-surface": "#d4e4fa",
+                      "surface-bright": "#2c3a4c",
+                      "surface-container-high": "#1c2b3c",
+                      "secondary-container": "#ee9800",
+                      "primary-container": "#4d8eff",
+                      "tertiary-container": "#00a572",
+                      "surface": "#051424",
+                      "tertiary": "#4edea3",
+                      "error": "#ffb4ab",
+                      "error-container": "#93000a",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "tertiary-fixed": "#6ffbbe",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "on-secondary-fixed": "#2a1700",
+                      "on-secondary-container": "#5b3800",
+                      "secondary-fixed": "#ffddb8",
+                      "inverse-on-surface": "#233143",
+                      "inverse-primary": "#005ac2",
+                      "on-tertiary": "#003824",
+                      "background": "#051424",
+                      "on-background": "#d4e4fa",
+                      "surface-container": "#122131",
+                      "outline-variant": "#424754",
+                      "outline": "#8c909f",
+                      "on-secondary": "#472a00",
+                      "surface-container-highest": "#273647",
+                      "on-primary-fixed": "#001a42",
+                      "on-primary-fixed-variant": "#004395",
+                      "on-tertiary-fixed-variant": "#005236"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "margin-page": "24px",
+                      "stack-gap": "8px",
+                      "gutter": "16px",
+                      "unit": "4px",
+                      "panel-padding": "12px"
+              },
+              "fontFamily": {
+                      "title-sm": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "display-lg": [
+                              "Inter"
+                      ],
+                      "button": [
+                              "Inter"
+                      ],
+                      "label-code": [
+                              "JetBrains Mono"
+                      ]
+              },
+              "fontSize": {
+                      "title-sm": [
+                              "18px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "button": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "label-code": [
+                              "11px",
+                              {
+                                      "lineHeight": "14px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background-color: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Custom Scrollbar for dark mode */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.surface'); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.outline-variant'); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline'); 
+        }
+    </style>
+<style data-stitch-cursor=""></style><style data-stitch-scroll-lock=""></style></head>
+<body class="bg-background text-on-background h-screen overflow-hidden flex flex-col font-body-md">
+<!-- TopNavBar -->
+<header class="bg-surface-variant/70 backdrop-blur-xl dark:bg-surface-variant/70 font-title-sm text-title-sm font-semibold flex justify-between items-center px-gutter h-16 w-full z-50 border-b border-outline-variant/30 flex-shrink-0">
+<div class="flex items-center gap-6">
+<h1 class="font-display-lg text-display-lg font-bold text-primary dark:text-primary-fixed-dim tracking-tighter">BIM.Core Reinforced</h1>
+<nav class="hidden md:flex gap-4 h-full">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors flex items-center h-full hover:bg-surface-container-high/50 transition-all duration-200 px-3" href="#">文件</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors flex items-center h-full hover:bg-surface-container-high/50 transition-all duration-200 px-3" href="#">编辑</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors flex items-center h-full hover:bg-surface-container-high/50 transition-all duration-200 px-3" href="#">视图</a>
+<a class="text-primary border-b-2 border-primary pb-1 flex items-center h-full px-3" href="#">计算分析</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors flex items-center h-full hover:bg-surface-container-high/50 transition-all duration-200 px-3" href="#">仿真模拟</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors flex items-center h-full hover:bg-surface-container-high/50 transition-all duration-200 px-3" href="#">报表</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-primary text-on-primary font-button text-button px-4 py-2 rounded-DEFAULT hover:bg-primary-fixed transition-colors">导出 IFC</button>
+<button class="border border-outline text-on-surface font-button text-button px-4 py-2 rounded-DEFAULT hover:bg-surface-container-high transition-colors">运行 AI 检查</button>
+<div class="flex gap-2 text-on-surface-variant">
+<button aria-label="settings" class="p-2 hover:bg-surface-container-high/50 rounded-full transition-colors"><span class="material-symbols-outlined">settings</span></button>
+<button aria-label="notifications" class="p-2 hover:bg-surface-container-high/50 rounded-full transition-colors"><span class="material-symbols-outlined">notifications</span></button>
+<button aria-label="cloud_done" class="p-2 hover:bg-surface-container-high/50 rounded-full transition-colors"><span class="material-symbols-outlined">cloud_done</span></button>
+</div>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant">
+<img alt="Lead Structural Engineer Profile" class="w-full h-full object-cover" data-alt="A highly detailed close-up portrait of a professional engineer in a dark tech environment, illuminated by the cool blue light of a monitor. The aesthetic is modern, serious, and cinematic. High contrast lighting with deep shadows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKeL1rcBR-bwd4CVE09H4CC6aprOUaWWtseq3FCgY0GhaheiMBUCrdiZ8TjLxRXw2dbMp18xEis2CpClSBfi9gZD87PcvsN18072E2h9pk1lMyKdiOVUd7ut4nN_j56TD-eytlm6_dxmxf5Tm9xZc_of_fWAFfUUQpOCk7lcfR-cpqG1ldsPWZDRP5YCAZk1Z9rWNOdvJ4vjxSLOJ-lQaQT8kBwOv7B4qJrb9g9Y159A2Z1kVj-uMdRK8vWVCRDHzbFqdUJsCt2j8"/>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-surface-container-low dark:bg-surface-container-low font-label-code text-label-code uppercase tracking-widest border-r border-outline-variant/20 flex flex-col h-full py-panel-padding px-stack-gap gap-stack-gap w-72 flex-shrink-0 z-40">
+<div class="mb-6 px-2">
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined" data-icon="domain">domain</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">工程结构</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant lowercase normal-case">工业设施 v2.4</p>
+</div>
+</div>
+<button class="w-full bg-surface-container-high text-primary hover:bg-surface-container-highest/40 transition-colors py-2 rounded-lg border border-outline-variant/30 font-button flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                    添加构件
+                </button>
+</div>
+<nav class="flex-1 flex flex-col gap-1 overflow-y-auto">
+<a class="bg-primary-container text-on-primary-container rounded-lg font-bold flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="reorder">reorder</span>
+                    梁
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="view_quilt">view_quilt</span>
+                    墙
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="view_column">view_column</span>
+                    柱
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="stairs">stairs</span>
+                    楼梯
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="layers">layers</span>
+                    基础
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-3" href="#">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+                    板
+                </a>
+</nav>
+<div class="mt-auto border-t border-outline-variant/20 pt-4 flex flex-col gap-1">
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="architecture">architecture</span>
+                    材质
+                </a>
+<a class="text-on-surface-variant hover:bg-surface-container-high rounded-lg hover:bg-surface-container-highest/40 transition-colors flex items-center gap-3 px-3 py-2" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+                    库
+                </a>
+<div class="mt-4 border-t border-outline-variant/20 pt-4 flex flex-col h-64">
+<div class="flex items-center justify-between mb-2 px-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="smart_toy">smart_toy</span>
+<span class="font-title-sm text-xs text-on-surface uppercase">AI 助手</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+</div>
+<div class="flex-1 overflow-y-auto flex flex-col gap-2 font-body-sm text-[10px] px-2">
+<div class="bg-surface-container-highest/50 p-2 rounded-lg rounded-tl-none self-start max-w-[90%] border border-outline-variant/10">
+<p class="text-on-surface leading-tight">正在分析节点 J-42... 配筋率为 2.4%。</p>
+</div>
+<div class="bg-primary/20 p-2 rounded-lg rounded-tr-none self-end max-w-[90%] border border-primary/20">
+<p class="text-on-surface leading-tight">优化箍筋间距。</p>
+</div>
+</div>
+<div class="mt-2 px-2">
+<div class="relative">
+<input class="w-full bg-surface border border-outline-variant/50 rounded-full pl-3 pr-8 py-1 text-[10px] text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none placeholder-on-surface-variant/50" placeholder="向 AI 提问..." type="text"/>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 text-primary hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</div></div>
+</aside>
+<!-- Center Column (Viewport & Data) -->
+<main class="flex-1 flex flex-col h-full bg-[#0F172A] relative min-w-0">
+<!-- 3D Viewport Top -->
+<div class="flex-1 relative overflow-hidden flex flex-col">
+<div class="absolute inset-0 bg-gradient-to-b from-[#0F172A] to-[#051424]">
+<!-- Placeholder for 3D Canvas -->
+<img alt="3D BIM visualization of reinforced concrete" class="w-full h-full object-cover mix-blend-screen opacity-90" data-alt="A highly complex 3D digital visualization of a reinforced concrete beam-column joint. The concrete is semi-opaque with a realistic, slightly textured stone appearance. Inside, the rebar cage is clearly visible, rendered with realistic metallic chrome and steel finishes, complete with visible ribs on the rebars. Lighting highlights the textures and reflections. Cinematic, realistic engineering aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwh3kQ-IyGbRUUURfJgjn7G3FxTgurrn6YoppokdE_jA6ilRm3qXxpD0MzfX_h3eQseFHSKYgN34h_0FqgE04BJdhrIXtZvvyDWRxzhSLtPtGo256YqrbYR0l4vNSBpFyrfp9Lkm6R4edBNCGg5ZuAefH9Heen_RRxhPo1MIJmBrxtVqdCzmEkl3wfcVnLtSCrTzWFf8d0nhq7T605UtSeAM8bMsJTokG-VOQzycaIvL4b2KYZlquphWGQWVJRJ6IVtiNhspyshVo"/>
+</div>
+<!-- Viewport HUD Controls -->
+<div class="absolute top-4 right-4 glass-panel rounded-lg p-2 flex flex-col gap-2 z-10">
+<button class="w-10 h-10 rounded hover:bg-surface-container-high/50 text-on-surface flex items-center justify-center transition-colors" title="Transparency (透明度)">
+<span class="material-symbols-outlined" data-icon="opacity">opacity</span>
+</button>
+<button class="w-10 h-10 rounded hover:bg-surface-container-high/50 text-on-surface flex items-center justify-center transition-colors" title="Rotation (旋转)">
+<span class="material-symbols-outlined" data-icon="360">360</span>
+</button>
+<button class="w-10 h-10 rounded hover:bg-surface-container-high/50 text-on-surface flex items-center justify-center transition-colors" title="Zoom (缩放)">
+<span class="material-symbols-outlined" data-icon="zoom_in">zoom_in</span>
+</button>
+<div class="w-full h-px bg-outline-variant/30 my-1"></div>
+<div class="text-center">
+<span class="font-label-code text-label-code text-error block">X</span>
+<span class="font-label-code text-label-code text-tertiary block">Y</span>
+<span class="font-label-code text-label-code text-primary block">Z</span>
+</div>
+</div>
+<!-- Breadcrumb / Context overlay -->
+<div class="absolute top-4 left-4 glass-panel rounded-lg px-4 py-2 z-10 flex items-center gap-2 font-label-code text-label-code">
+<span class="text-on-surface-variant">标高 2</span>
+<span class="text-outline-variant">/</span>
+<span class="text-primary">梁柱节点 J-42</span>
+</div>
+<!-- Floating Info Badge -->
+<div class="absolute bottom-4 left-4 bg-[rgba(245,158,11,0.1)] border border-secondary/30 rounded px-3 py-1.5 flex items-center gap-2 z-10">
+<span class="material-symbols-outlined text-secondary text-[16px]" data-icon="warning">warning</span>
+<span class="font-label-code text-label-code text-secondary">检测到碰撞：钢筋 C-12 &amp; B-04</span>
+</div>
+</div>
+<!-- Data Section Bottom -->
+<div class="h-1/3 min-h-[250px] bg-surface border-t border-outline-variant/30 flex flex-col z-20">
+<div class="flex border-b border-outline-variant/20 bg-surface-container-low">
+<button class="px-6 py-3 font-title-sm text-title-sm text-primary border-b-2 border-primary bg-surface-container">剖切面</button>
+<button class="px-6 py-3 font-title-sm text-title-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50 transition-colors">钢筋工程量</button>
+</div>
+<div class="flex-1 p-gutter overflow-y-auto">
+<!-- Pseudo 2D Drawing Area -->
+<div class="w-full h-full border border-outline-variant/20 rounded-lg bg-surface-container-lowest flex items-center justify-center relative overflow-hidden">
+<img alt="2D Engineering Drawing" class="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-luminosity" data-alt="A high-contrast, dark mode blueprint or 2D CAD engineering drawing of a concrete structure. Sharp white and faint blue lines on a deep navy background. Precise technical aesthetic showing structural dimensions and annotations." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_p4oPBzsRHZlxXJwd3n1gcRh6MByOA9kU7dxrPdf-uvf701G0RMWssp-l_PTGWCGEUXyzSwO6N1IZzAw5akg1MYG_iUX9CW_5YD67cf_PUozIjXV_NCqzlKtiMPBBFXpa2b62_GeaR9bQMzVWh9bPI0HqfSvddhRCwuD1sQBOAoAm-C1dDx490gst2BhByx6clV1IkRtxst7xESBAzLVLzT1cgMJH0xmpErgT-fvo59VX7b9p_XM6LtQfioqlRIT1lrHZU3jcxNg"/>
+<div class="z-10 font-label-code text-label-code text-on-surface-variant flex flex-col items-center gap-2 glass-panel p-4 rounded">
+<span class="material-symbols-outlined text-[32px]" data-icon="draft">draft</span>
+<span class="">剖面 A-A 激活</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Right Sidebar (Parameters & AI) -->
+<aside class="w-80 bg-surface-container-low border-l border-outline-variant/20 flex flex-col h-full flex-shrink-0 z-30">
+<div class="p-4 border-b border-outline-variant/20">
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="tune">tune</span>
+                    参数设置
+                </h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">参数调整 - 节点 J-42</p>
+</div>
+<div class="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+<!-- Dimensions -->
+<div class="space-y-3">
+<h4 class="font-title-sm text-title-sm text-on-surface border-b border-outline-variant/20 pb-1">尺寸</h4>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<label class="font-label-code text-label-code text-on-surface-variant">宽度 (B) mm</label>
+<input class="bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-on-surface font-label-code focus:border-primary focus:ring-1 focus:ring-primary outline-none" type="text" value="400"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-code text-label-code text-on-surface-variant">高度 (H) mm</label>
+<input class="bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-on-surface font-label-code focus:border-primary focus:ring-1 focus:ring-primary outline-none" type="text" value="600"/>
+</div>
+<div class="flex flex-col gap-1 col-span-2">
+<label class="font-label-code text-label-code text-on-surface-variant">长度 (L) mm</label>
+<input class="bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-on-surface font-label-code focus:border-primary focus:ring-1 focus:ring-primary outline-none" type="text" value="3200"/>
+</div>
+</div>
+</div>
+<!-- Materials -->
+<div class="space-y-3">
+<h4 class="font-title-sm text-title-sm text-on-surface border-b border-outline-variant/20 pb-1">材料</h4>
+<div class="flex flex-col gap-1">
+<label class="font-label-code text-label-code text-on-surface-variant">混凝土标号</label>
+<select class="bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-on-surface font-body-sm focus:border-primary outline-none appearance-none">
+<option>C30</option>
+<option selected="">C35</option>
+<option>C40</option>
+</select>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-code text-label-code text-on-surface-variant">主筋规格</label>
+<select class="bg-surface border border-outline-variant/50 rounded px-2 py-1.5 text-on-surface font-body-sm focus:border-primary outline-none appearance-none">
+<option>HRB400 Φ20</option>
+<option selected="">HRB400 Φ25</option>
+<option>HRB500 Φ25</option>
+</select>
+</div>
+</div>
+<button class="w-full bg-primary/10 text-primary border border-primary/30 py-2 rounded font-button text-button hover:bg-primary/20 transition-colors">应用更改</button>
+</div>
+<!-- AI Copilot -->
+</aside>
+</div>
+</body></html>

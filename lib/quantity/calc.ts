@@ -1,6 +1,6 @@
 // 工程量计算（阶段 A + B）
 import type { Component, QuantityResult, Rebar } from "../types";
-import { REBAR_UNIT_WEIGHT, La } from "../g101/tables";
+import { REBAR_UNIT_WEIGHT, La, stirrupHookLength, pileEmbedDepth } from "../g101/tables";
 
 /** 构件几何体积 m³ 与模板面积 m² */
 function geomMetrics(c: Component): { volume: number; formwork: number } {
@@ -32,13 +32,18 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
   const g = c.geometry;
   const cover = c.concrete.cover;
   const la = La(c.concrete.grade, r.grade, r.diameter);
+  const seismic = c.concrete.seismic !== "NONE";
 
   if (c.type === "BEAM" || c.type === "COLUMN") {
     const L = g.L ?? 0;
     const b = g.b ?? 0;
     const h = g.h ?? 0;
     if (r.role === "STIRRUP") {
-      const per = 2 * ((b - 2 * cover) + (h - 2 * cover)) + 2 * 75; // 弯钩 75mm × 2
+      // 箍筋周长 + 弯钩 — 22G101-1 第2-7页
+      // 抗震：135°弯钩，弯后直段 ≥ 10d 且 ≥ 75mm
+      // 非抗震：90°弯钩，弯后直段 ≥ 5d
+      const hook = stirrupHookLength(r.diameter, seismic);
+      const per = 2 * ((b - 2 * cover) + (h - 2 * cover)) + 2 * hook;
       // 分段：两端加密 + 中部非加密
       const dz = r.densifyLength ?? 0;
       const ds = r.densifySpacing;
@@ -52,6 +57,12 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
         n = Math.floor(L / ns) + 1;
       }
       return { totalLenM: (per * n) / 1000, countTotal: n };
+    }
+    if (r.role === "SIDE" || r.role === "LONGITUDINAL") {
+      // 侧面构造筋 — 22G101-1 第2-41页：锚固/搭接长度可取为 15d
+      const n = r.count ?? 0;
+      const perBar = L + 2 * 15 * r.diameter;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     const n = r.count ?? 0;
     const perBar = L + 2 * la;
@@ -70,7 +81,9 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     }
     if (r.spacing) {
       const n = Math.floor(Ly / r.spacing) + 1;
-      const perBar = Lx + 2 * la;
+      // 板下部纵筋锚固：伸至支座中心线且 ≥ 5d — 22G101-1 第2-50页
+      const anchor = Math.max(200 / 2, 5 * r.diameter);
+      const perBar = Lx + 2 * anchor;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     return { totalLenM: 0, countTotal: 0 };
@@ -79,13 +92,38 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
   if (c.type === "PILE") {
     const L = g.L ?? 0;
     const D = g.D ?? 0;
-    if (r.role === "SPIRAL" || r.role === "STIFFEN" || r.role === "STIRRUP") {
+    if (r.role === "SPIRAL") {
+      // 螺旋箍：桩顶加密区5D + 非加密区
+      const dz = r.densifyLength ?? 0;
+      const ds = r.densifySpacing;
+      const ns = r.spacing ?? 0;
+      const per = Math.PI * (D - 2 * cover);
+      let n = 0;
+      if (dz > 0 && ds && ds > 0) {
+        n += Math.floor(dz / ds) + 1; // 桩顶加密区
+        const middle = Math.max(0, L - dz);
+        if (ns > 0 && middle > 0) n += Math.max(0, Math.floor(middle / ns) - 1);
+      } else if (ns > 0) {
+        n = Math.floor(L / ns) + 1;
+      }
+      return { totalLenM: (per * n) / 1000, countTotal: n };
+    }
+    if (r.role === "STIFFEN") {
+      // 加劲箍：焊接闭合箍，周长 + 搭接
+      const per = Math.PI * (D - 2 * cover) + 80; // 搭接80mm
+      const n = r.count ?? 0;
+      return { totalLenM: (per * n) / 1000, countTotal: n };
+    }
+    if (r.role === "STIRRUP") {
       const per = Math.PI * (D - 2 * cover);
       const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
       return { totalLenM: (per * n) / 1000, countTotal: n };
     }
+    // 主筋：通长 + 桩顶入承台锚固 — 22G101-3 第2-48页
     const n = r.count ?? 0;
-    return { totalLenM: ((L + la) * n) / 1000, countTotal: n };
+    const embed = pileEmbedDepth(D);
+    const perBar = L + la + embed; // la为锚入承台长度（简化取la）
+    return { totalLenM: (perBar * n) / 1000, countTotal: n };
   }
   return { totalLenM: 0, countTotal: 0 };
 }
