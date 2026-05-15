@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-const KEY = "rebar-quant.aiConfig";
+const KEY = "rebar-quant.aiConfig.v3";
 
 export interface AIConfig {
   baseUrl: string;
@@ -15,17 +15,22 @@ export function loadAIConfig(): AIConfig {
   if (typeof window === "undefined") return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
-    const c = JSON.parse(raw);
-    return {
-      baseUrl: c.baseUrl || "",
-      model: c.model || "",
-      apiKey: c.apiKey || "",
-      temperature: typeof c.temperature === "number" ? c.temperature : 0.3,
-    };
-  } catch {
-    return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
-  }
+    if (raw) {
+      const c = JSON.parse(raw);
+      return {
+        baseUrl: c.baseUrl || "",
+        model: c.model || "",
+        apiKey: c.apiKey || "",
+        temperature: typeof c.temperature === "number" ? c.temperature : 0.3,
+      };
+    }
+  } catch {}
+  return { baseUrl: "", model: "", apiKey: "", temperature: 0.3 };
+}
+
+export function saveAIConfig(cfg: AIConfig) {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch {}
 }
 
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -45,9 +50,9 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   const save = () => {
     const cfg: AIConfig = { baseUrl, model, apiKey, temperature };
-    localStorage.setItem(KEY, JSON.stringify(cfg));
-    setMsg("已保存");
-    setTimeout(() => setMsg(""), 1500);
+    saveAIConfig(cfg);
+    setMsg("已保存（保存在本地浏览器）");
+    setTimeout(() => setMsg(""), 2000);
   };
 
   return (
@@ -79,7 +84,9 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setTemperature(+e.target.value)} className="w-full" />
           </div>
           <div className="text-xs text-eng-muted">
-            配置保存在浏览器 <code>localStorage</code>。请求经 <code>/api/ai/chat</code> 服务端代理转发以避开 CORS，但 Key 仅在你本机使用。
+            配置保存在浏览器 localStorage（下次打开无需重新输入）。
+            <br />请求经 <code>/api/ai/chat</code> 服务端代理转发以避开 CORS。
+            <br />部署者可在环境变量 <code>AI_BASE_URL / AI_API_KEY / AI_MODEL</code> 中预配置 Key，用户无需输入。
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">

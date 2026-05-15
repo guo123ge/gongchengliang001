@@ -4,9 +4,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { useStore } from "@/lib/store";
+import { sceneCaptureRef } from "@/lib/sceneCapture";
 import type { Component } from "@/lib/types";
 import { buildComponentObject } from "@/lib/three/geometry";
+import { buildInstancedScene, getComponentIdFromHit } from "@/lib/three/instanced";
 import { endpointsToScene } from "@/lib/dxf/parser";
+import { detectCollisions, collisionsToVisuals } from "@/lib/g101/collision";
 
 export default function Scene3D() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -22,12 +25,15 @@ export default function Scene3D() {
   const components = useStore((s) => s.components);
   const showConcrete = useStore((s) => s.showConcrete);
   const showRebar = useStore((s) => s.showRebar);
+  const showCollisions = useStore((s) => s.showCollisions);
   const selectedId = useStore((s) => s.selectedId);
   const select = useStore((s) => s.select);
   const updateComponent = useStore((s) => s.updateComponent);
   const clip = useStore((s) => s.clip);
   const setClip = useStore((s) => s.setClip);
   const gizmoMode = useStore((s) => s.gizmoMode);
+  const cameraView = useStore((s) => s.cameraView);
+  const setCameraView = useStore((s) => s.setCameraView);
   const blueprint = useStore((s) => s.blueprint);
   const updateBlueprint = useStore((s) => s.updateBlueprint);
   const blueprintMeshRef = useRef<THREE.Mesh | null>(null);
@@ -35,6 +41,7 @@ export default function Scene3D() {
   const snapPointsRef = useRef<{ x: number; z: number }[]>([]);
   const snapMarkerRef = useRef<THREE.Mesh | null>(null);
   const dimGroupRef = useRef<THREE.Group | null>(null);
+  const collisionGroupRef = useRef<THREE.Group | null>(null);
 
   // 初始化
   useEffect(() => {
@@ -75,6 +82,11 @@ export default function Scene3D() {
     dimGroup.name = "dimensions";
     scene.add(dimGroup);
     dimGroupRef.current = dimGroup;
+
+    const collisionGroup = new THREE.Group();
+    collisionGroup.name = "collisions";
+    scene.add(collisionGroup);
+    collisionGroupRef.current = collisionGroup;
 
     // 构件 TransformControls
     const tcomp = new TransformControls(camera, renderer.domElement);
@@ -226,13 +238,33 @@ export default function Scene3D() {
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObjects(group.children, true);
       if (hits.length > 0) {
-        let obj: THREE.Object3D | null = hits[0].object;
-        while (obj && !obj.userData.componentId) obj = obj.parent;
-        if (obj?.userData.componentId) select(obj.userData.componentId);
+        // 先尝试 InstancedMesh 命中（instanceIndex → componentId）
+        const first = hits[0];
+        const obj = first.object;
+        if (obj.userData.kind === "instanced-concrete" && obj.userData.componentIds) {
+          const ids = obj.userData.componentIds as string[];
+          const idx = first.instanceId;
+          if (idx != null && ids[idx]) {
+            select(ids[idx]);
+            return;
+          }
+        }
+        // 回退到传统 Object3D 遍历查找
+        let target: THREE.Object3D | null = first.object;
+        while (target && !target.userData.componentId) target = target.parent;
+        if (target?.userData.componentId) select(target.userData.componentId);
       }
     };
     renderer.domElement.addEventListener("pointerdown", onDown);
     renderer.domElement.addEventListener("pointerup", onUp);
+
+    // 注册截图函数
+    sceneCaptureRef.current = (format) => {
+      if (!rendererRef.current) return null;
+      rendererRef.current.render(scene, camera);
+      const mime = format === "jpg" ? "image/jpeg" : "image/png";
+      return rendererRef.current.domElement.toDataURL(mime, 0.92);
+    };
 
     let raf = 0;
     const loop = () => {
@@ -255,12 +287,12 @@ export default function Scene3D() {
     };
   }, [select, updateComponent, setClip]);
 
-  // 重建构件
+  // 重建构件（使用 InstancedMesh 提高性能）
   useEffect(() => {
     const group = groupRef.current;
     const tcomp = tcompRef.current;
     if (!group || !tcomp) return;
-    // 拖拽时不重建（避免对象被替换）
+    // 拖拽时不重建
     if ((tcomp as any).dragging) return;
 
     // 清空
@@ -273,41 +305,119 @@ export default function Scene3D() {
         else o.material?.dispose?.();
       });
     }
-    let selectedObj: THREE.Object3D | null = null;
-    for (const c of components) {
-      const obj = buildComponentObject(c, { showConcrete, showRebar });
-      if (c.id === selectedId) {
-        selectedObj = obj;
-        obj.traverse((o: any) => {
-          if (o.isMesh && o.material) {
-            o.material = o.material.clone();
-            o.material.emissive = new THREE.Color(0x2563eb);
-            o.material.emissiveIntensity = 0.4;
+
+    // 选择策略：当构件数 < 20 时用传统方式（保留 TransformControls 精确拾取）
+    // 当构件数 >= 20 时用 InstancedMesh（高性能，但 TransformControls 降级）
+    const USE_INSTANCED = components.length >= 20;
+
+    if (USE_INSTANCED) {
+      // ═══ InstancedMesh 模式 ═══
+      const { concreteInstances, rebarObjects } = buildInstancedScene(components, selectedId, {
+        showConcrete,
+        showRebar,
+      });
+
+      const clipPlanes = clip.enabled ? [getClipPlane(clip.axis, clip.position)] : [];
+
+      for (const im of concreteInstances) {
+        // 应用剖切面
+        (im.material as THREE.MeshStandardMaterial).clippingPlanes = clipPlanes;
+        group.add(im);
+      }
+
+      for (const ro of rebarObjects) {
+        // 将钢筋放到正确位置
+        ro.traverse((o: any) => {
+          if (o.material) {
+            if (Array.isArray(o.material)) o.material.forEach((m: any) => (m.clippingPlanes = clipPlanes));
+            else o.material.clippingPlanes = clipPlanes;
           }
         });
+        group.add(ro);
       }
-      const clipPlanes = clip.enabled ? [getClipPlane(clip.axis, clip.position)] : [];
-      obj.traverse((o: any) => {
-        if (o.material) {
-          if (Array.isArray(o.material)) o.material.forEach((m: any) => (m.clippingPlanes = clipPlanes));
-          else o.material.clippingPlanes = clipPlanes;
-        }
-      });
-      group.add(obj);
-    }
 
-    // 附加变换控制器到选中构件
-    if (selectedObj) {
-      tcomp.attach(selectedObj);
-      tcomp.setMode(gizmoMode);
-      (tcomp as any).visible = true;
-      tcomp.enabled = true;
-    } else {
+      // InstancedMesh 模式下 TransformControls 仅能控制整组，不精确附加到单体
       tcomp.detach();
       (tcomp as any).visible = false;
       tcomp.enabled = false;
+    } else {
+      // ═══ 传统模式（<20 构件，保留 TransformControls） ═══
+      let selectedObj: THREE.Object3D | null = null;
+      for (const c of components) {
+        const obj = buildComponentObject(c, { showConcrete, showRebar });
+        if (c.id === selectedId) {
+          selectedObj = obj;
+          obj.traverse((o: any) => {
+            if (o.isMesh && o.material) {
+              o.material = o.material.clone();
+              o.material.emissive = new THREE.Color(0x2563eb);
+              o.material.emissiveIntensity = 0.4;
+            }
+          });
+        }
+        const clipPlanes = clip.enabled ? [getClipPlane(clip.axis, clip.position)] : [];
+        obj.traverse((o: any) => {
+          if (o.material) {
+            if (Array.isArray(o.material)) o.material.forEach((m: any) => (m.clippingPlanes = clipPlanes));
+            else o.material.clippingPlanes = clipPlanes;
+          }
+        });
+        group.add(obj);
+      }
+
+      // 附加变换控制器到选中构件
+      if (selectedObj) {
+        tcomp.attach(selectedObj);
+        tcomp.setMode(gizmoMode);
+        (tcomp as any).visible = true;
+        tcomp.enabled = true;
+      } else {
+        tcomp.detach();
+        (tcomp as any).visible = false;
+        tcomp.enabled = false;
+      }
     }
-  }, [components, showConcrete, showRebar, selectedId, clip, gizmoMode]);
+
+    // ═══ 碰撞区域可视化（22G101）═══
+    const collisionGroup = collisionGroupRef.current;
+    if (collisionGroup) {
+      // 清空旧的碰撞标记
+      while (collisionGroup.children.length) {
+        const obj = collisionGroup.children[0];
+        collisionGroup.remove(obj);
+        obj.traverse((o: any) => {
+          o.geometry?.dispose?.();
+          if (Array.isArray(o.material)) o.material.forEach((m: any) => m.dispose?.());
+          else o.material?.dispose?.();
+        });
+      }
+
+      if (showCollisions && components.length >= 2) {
+        const collisions = detectCollisions(components);
+        const visuals = collisionsToVisuals(collisions);
+        for (const v of visuals) {
+          const geo = new THREE.BoxGeometry(v.size[0], v.size[1], v.size[2]);
+          const mat = new THREE.MeshBasicMaterial({
+            color: v.color,
+            transparent: true,
+            opacity: v.opacity,
+            depthWrite: false,
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(v.center[0], v.center[1], v.center[2]);
+          mesh.userData = { kind: "collision", label: v.label };
+          collisionGroup.add(mesh);
+
+          // 添加边框线
+          const edges = new THREE.EdgesGeometry(geo);
+          const lineMat = new THREE.LineBasicMaterial({ color: v.color, transparent: true, opacity: 0.7 });
+          const line = new THREE.LineSegments(edges, lineMat);
+          line.position.copy(mesh.position);
+          collisionGroup.add(line);
+        }
+      }
+    }
+  }, [components, showConcrete, showRebar, selectedId, clip, gizmoMode, showCollisions]);
 
   // 同步 DXF 蓝图底图（地面平面贴图） + 蓝图 TransformControls + 吸附端点
   useEffect(() => {
@@ -442,6 +552,40 @@ export default function Scene3D() {
     const dims = buildDimensionLabels(c);
     for (const d of dims) dimGroup.add(d);
   }, [components, selectedId, showDimensions]);
+
+  // 相机视角切换
+  useEffect(() => {
+    if (!cameraRef.current || !orbitRef.current || !cameraView) return;
+    const cam = cameraRef.current;
+    const orbit = orbitRef.current;
+
+    if (cameraView === "tour") {
+      orbit.autoRotate = true;
+      orbit.autoRotateSpeed = 2.0;
+      setCameraView(null);
+      return;
+    }
+
+    orbit.autoRotate = false;
+
+    const views: Record<string, [number, number, number]> = {
+      front: [0, 0, 20],
+      top: [0, 20, 0.001],
+      side: [-20, 0, 0],
+      nw: [-10, 10, -10],
+      sw: [-10, 10, 10],
+      ne: [10, 10, -10],
+      se: [10, 10, 10],
+    };
+
+    const pos = views[cameraView];
+    if (pos) {
+      cam.position.set(pos[0], pos[1], pos[2]);
+      orbit.target.set(0, 0, 0);
+      orbit.update();
+    }
+    setCameraView(null);
+  }, [cameraView, setCameraView]);
 
   return <div ref={mountRef} className="absolute inset-0" />;
 }

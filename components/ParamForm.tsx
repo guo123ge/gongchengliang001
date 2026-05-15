@@ -164,15 +164,12 @@ export default function ParamForm() {
                   <input type="number" className="input-eng" placeholder="直径" value={r.diameter} onChange={(e) => updRebar(r.id, { diameter: +e.target.value })} />
                   <button className="btn-secondary justify-center text-xs" onClick={() => delRebar(r.id)}><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Field label="根数">
                     <input type="number" className="input-eng" value={r.count ?? 0} onChange={(e) => updRebar(r.id, { count: +e.target.value })} />
                   </Field>
                   <Field label={r.role === "STIRRUP" ? "非加密间距(mm)" : "间距(mm)"}>
                     <input type="number" className="input-eng" value={r.spacing ?? 0} onChange={(e) => updRebar(r.id, { spacing: +e.target.value })} />
-                  </Field>
-                  <Field label="原位标注">
-                    <input className="input-eng" value={r.label ?? ""} placeholder="如 2C25+2C22" onChange={(e) => updRebar(r.id, { label: e.target.value })} />
                   </Field>
                 </div>
                 {r.role === "STIRRUP" && (

@@ -1,47 +1,40 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import TopBar from "@/components/TopBar";
 import LeftTree from "@/components/LeftTree";
 import RightPanel from "@/components/RightPanel";
 import BottomBar from "@/components/BottomBar";
 import SceneToolbar from "@/components/SceneToolbar";
 import LegendOverlay from "@/components/LegendOverlay";
+import WelcomeEmpty from "@/components/WelcomeEmpty";
 import { useStore } from "@/lib/store";
 
 const Scene3D = dynamic(() => import("@/components/Scene3D"), { ssr: false });
 
 export default function Home() {
-  const addComponent = useStore((s) => s.addComponent);
   const components = useStore((s) => s.components);
-
-  useEffect(() => {
-    if (components.length === 0) {
-      addComponent("COLUMN");
-      addComponent("BEAM");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const leftPanelOpen = useStore((s) => s.leftPanelOpen);
+  const bottomPanelOpen = useStore((s) => s.bottomPanelOpen);
+  const toggleLeftPanel = useStore((s) => s.toggleLeftPanel);
+  const toggleBottomPanel = useStore((s) => s.toggleBottomPanel);
 
   const [leftWidth, setLeftWidth] = useState(288);
   const [rightWidth, setRightWidth] = useState(320);
   const [bottomHeight, setBottomHeight] = useState(250);
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [bottomCollapsed, setBottomCollapsed] = useState(true);
 
   const prevLeft = useRef(288);
   const prevRight = useRef(320);
   const prevBottom = useRef(250);
 
   const toggleLeft = () => {
-    if (leftCollapsed) {
-      setLeftCollapsed(false);
+    if (!leftPanelOpen) {
       setLeftWidth(prevLeft.current);
     } else {
       prevLeft.current = leftWidth;
-      setLeftCollapsed(true);
     }
+    toggleLeftPanel();
   };
 
   const toggleRight = () => {
@@ -55,18 +48,17 @@ export default function Home() {
   };
 
   const toggleBottom = () => {
-    if (bottomCollapsed) {
-      setBottomCollapsed(false);
+    if (!bottomPanelOpen) {
       setBottomHeight(prevBottom.current);
     } else {
       prevBottom.current = bottomHeight;
-      setBottomCollapsed(true);
     }
+    toggleBottomPanel();
   };
 
   const startResizeLeft = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (leftCollapsed) return;
+    if (!leftPanelOpen) return;
     const startX = e.clientX;
     const startW = leftWidth;
     const onMove = (ev: MouseEvent) => {
@@ -100,7 +92,7 @@ export default function Home() {
 
   const startResizeBottom = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (bottomCollapsed) return;
+    if (!bottomPanelOpen) return;
     const startY = e.clientY;
     const startH = bottomHeight;
     const onMove = (ev: MouseEvent) => {
@@ -125,12 +117,12 @@ export default function Home() {
         {/* Left Sidebar */}
         <div
           className="shrink-0 flex border-r border-outline-variant/20"
-          style={{ width: leftCollapsed ? 40 : leftWidth }}
+          style={{ width: leftPanelOpen ? leftWidth : 40 }}
         >
           <div className="flex-1 overflow-hidden bg-surface-container-low">
-            <LeftTree collapsed={leftCollapsed} onToggle={toggleLeft} />
+            <LeftTree collapsed={!leftPanelOpen} onToggle={toggleLeft} />
           </div>
-          {!leftCollapsed && (
+          {leftPanelOpen && (
             <div
               className="w-1 shrink-0 cursor-col-resize bg-outline-variant/30 hover:bg-primary transition-colors"
               onMouseDown={startResizeLeft}
@@ -143,20 +135,20 @@ export default function Home() {
         <div className="flex-1 relative min-w-0 flex flex-col bg-surface">
           {/* 3D Viewport */}
           <div className="flex-1 relative overflow-hidden">
-            <Scene3D />
-            <SceneToolbar />
-            <LegendOverlay />
+            {components.length === 0 ? (
+              <WelcomeEmpty />
+            ) : (
+              <>
+                <Scene3D />
+                <SceneToolbar />
+                <LegendOverlay />
 
-            {/* Breadcrumb / Context overlay */}
-            <div className="absolute top-4 left-4 glass-panel rounded-lg px-4 py-2 z-10 flex items-center gap-2 font-label-code text-label-code">
-              <span className="text-on-surface-variant">标高 2</span>
-              <span className="text-outline-variant">/</span>
-              <span className="text-primary">梁柱节点 J-42</span>
-            </div>
+                              </>
+            )}
           </div>
 
           {/* Bottom Data Panel */}
-          {!bottomCollapsed && (
+          {bottomPanelOpen && (
             <div
               className="shrink-0 border-t border-outline-variant/20 bg-surface-container-low flex flex-col"
               style={{ height: bottomHeight }}
@@ -171,7 +163,7 @@ export default function Home() {
               </div>
             </div>
           )}
-          {bottomCollapsed && (
+          {!bottomPanelOpen && (
             <div className="shrink-0 h-7 bg-surface-container-low border-t border-outline-variant/20 flex items-center px-2">
               <button
                 onClick={toggleBottom}

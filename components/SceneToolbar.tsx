@@ -1,14 +1,16 @@
 "use client";
-import { Eye, EyeOff, Scissors, Move3d, RotateCw, Image as ImageIcon, Trash2, Magnet, Lock, Unlock, Ruler } from "lucide-react";
+import { Eye, EyeOff, Scissors, Move3d, RotateCw, Image as ImageIcon, Trash2, Magnet, Lock, Unlock, Ruler, AlertTriangle } from "lucide-react";
 import { useStore } from "@/lib/store";
 
 export default function SceneToolbar() {
   const showConcrete = useStore((s) => s.showConcrete);
   const showRebar = useStore((s) => s.showRebar);
   const showDimensions = useStore((s) => s.showDimensions);
+  const showCollisions = useStore((s) => s.showCollisions);
   const toggleConcrete = useStore((s) => s.toggleConcrete);
   const toggleRebar = useStore((s) => s.toggleRebar);
   const toggleDimensions = useStore((s) => s.toggleDimensions);
+  const toggleCollisions = useStore((s) => s.toggleCollisions);
   const clip = useStore((s) => s.clip);
   const setClip = useStore((s) => s.setClip);
   const gizmoMode = useStore((s) => s.gizmoMode);
@@ -44,6 +46,14 @@ export default function SceneToolbar() {
       >
         <Ruler className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">尺寸</span>
+      </button>
+      <button
+        className={showCollisions ? "btn-glass bg-error/10 text-error" : "btn-glass"}
+        onClick={toggleCollisions}
+        title="切换碰撞区域显隐（22G101）"
+      >
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">碰撞</span>
       </button>
 
       <div className="h-5 w-px bg-outline-variant/30 mx-1" />

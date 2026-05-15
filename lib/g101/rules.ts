@@ -1,6 +1,7 @@
 // 22G101 平法校验规则引擎（依据 22G101-1 / 22G101-3）
 
 import type { Component, ValidationItem } from "../types";
+import { detectCollisions, collisionsToValidations } from "./collision";
 import {
   minCover,
   beamStirrupMaxSpacingDense,
@@ -342,5 +343,8 @@ export function validateComponent(c: Component): ValidationItem[] {
 export function validateAll(cs: Component[]): ValidationItem[] {
   const items = cs.flatMap(validateComponent);
   items.push(...checkBeamColumnNodes(cs));
+  // 22G101 构件碰撞检测（混凝土重叠区 + 钢筋冲突）
+  const collisions = detectCollisions(cs);
+  items.push(...collisionsToValidations(collisions));
   return items;
 }

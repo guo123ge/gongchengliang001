@@ -5,6 +5,15 @@ import { uid } from "./utils";
 import { autoFillRebar } from "./g101/autoRebar";
 import { validateAll } from "./g101/rules";
 import type { DxfBBox, DxfEndpoint } from "./dxf/parser";
+import {
+  saveProject,
+  loadProject,
+  listProjects,
+  deleteProject,
+  genProjectId,
+  isIndexedDBAvailable,
+  type ProjectRecord,
+} from "./db";
 
 interface ClipPlane {
   axis: "x" | "y" | "z";
@@ -31,6 +40,9 @@ export interface Blueprint {
 
 interface State {
   projectName: string;
+  projectId: string | null;       // IndexedDB 项目 ID
+  projectList: ProjectRecord[];   // 项目列表（轻量，无 components）
+  saveStatus: "saved" | "saving" | "unsaved";
   components: Component[];
   selectedId: string | null;
   validations: ValidationItem[];
@@ -38,8 +50,16 @@ interface State {
   showRebar: boolean;
   showConcrete: boolean;
   showDimensions: boolean;
+  showCollisions: boolean;
   toggleDimensions: () => void;
+  toggleCollisions: () => void;
   aiOpen: boolean;
+  leftPanelOpen: boolean;
+  bottomPanelOpen: boolean;
+  toggleLeftPanel: () => void;
+  toggleBottomPanel: () => void;
+  cameraView: "front" | "top" | "side" | "nw" | "sw" | "ne" | "se" | "tour" | null;
+  setCameraView: (v: State["cameraView"]) => void;
   gizmoMode: "translate" | "rotate";
   setGizmoMode: (m: "translate" | "rotate") => void;
   setProjectName: (n: string) => void;
@@ -56,6 +76,12 @@ interface State {
   blueprint: Blueprint | null;
   setBlueprint: (b: Blueprint | null) => void;
   updateBlueprint: (p: Partial<Blueprint>) => void;
+  // === 新增持久化方法 ===
+  saveToDB: () => Promise<void>;
+  loadFromDB: (id: string) => Promise<boolean>;
+  listFromDB: () => Promise<void>;
+  deleteFromDB: (id: string) => Promise<void>;
+  newProject: () => void;
 }
 
 function defaultComponent(type: ComponentType): Component {
@@ -86,6 +112,9 @@ function defaultComponent(type: ComponentType): Component {
 
 export const useStore = create<State>((set, get) => ({
   projectName: "未命名项目",
+  projectId: null,
+  projectList: [],
+  saveStatus: "saved",
   components: [],
   selectedId: null,
   validations: [],
@@ -93,25 +122,36 @@ export const useStore = create<State>((set, get) => ({
   showRebar: true,
   showConcrete: true,
   showDimensions: true,
+  showCollisions: true,
   toggleDimensions: () => set((s) => ({ showDimensions: !s.showDimensions })),
+  toggleCollisions: () => set((s) => ({ showCollisions: !s.showCollisions })),
   aiOpen: false,
+  leftPanelOpen: true,
+  bottomPanelOpen: false,
+  toggleLeftPanel: () => set((s) => ({ leftPanelOpen: !s.leftPanelOpen })),
+  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  cameraView: null,
+  setCameraView: (v) => set({ cameraView: v }),
   gizmoMode: "translate",
   setGizmoMode: (m) => set({ gizmoMode: m }),
-  setProjectName: (n) => set({ projectName: n }),
+  setProjectName: (n) => set({ projectName: n, saveStatus: "unsaved" }),
   addComponent: (t) => {
     const c = defaultComponent(t);
-    set((s) => ({ components: [...s.components, c], selectedId: c.id }));
+    set((s) => ({ components: [...s.components, c], selectedId: c.id, saveStatus: "unsaved" }));
     get().revalidate();
     return c.id;
   },
-  removeComponent: (id) =>
+  removeComponent: (id) => {
     set((s) => ({
-      components: s.components.filter((c) => c.id !== id),
+      components: s.components.filter((ci) => ci.id !== id),
       selectedId: s.selectedId === id ? null : s.selectedId,
-    })),
+      saveStatus: "unsaved",
+    }));
+  },
   updateComponent: (id, patch) => {
     set((s) => ({
       components: s.components.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      saveStatus: "unsaved",
     }));
     get().revalidate();
   },
@@ -128,4 +168,86 @@ export const useStore = create<State>((set, get) => ({
   blueprint: null,
   setBlueprint: (b) => set({ blueprint: b }),
   updateBlueprint: (p) => set((s) => ({ blueprint: s.blueprint ? { ...s.blueprint, ...p } : null })),
+
+  // === 持久化方法 ===
+  saveToDB: async () => {
+    const s = get();
+    set({ saveStatus: "saving" });
+    try {
+      const record: ProjectRecord = {
+        id: s.projectId ?? genProjectId(),
+        name: s.projectName,
+        components: s.components,
+        blueprint: s.blueprint,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        version: 1,
+        componentCount: s.components.length,
+      };
+      await saveProject(record);
+      set({ projectId: record.id, saveStatus: "saved" });
+      // 刷新列表
+      get().listFromDB();
+    } catch {
+      set({ saveStatus: "unsaved" });
+      console.error("IndexedDB 保存失败");
+    }
+  },
+
+  loadFromDB: async (id) => {
+    try {
+      const record = await loadProject(id);
+      if (!record) return false;
+      set({
+        projectId: record.id,
+        projectName: record.name,
+        components: record.components,
+        blueprint: record.blueprint,
+        selectedId: null,
+        saveStatus: "saved",
+      });
+      get().revalidate();
+      return true;
+    } catch {
+      console.error("IndexedDB 加载失败");
+      return false;
+    }
+  },
+
+  listFromDB: async () => {
+    try {
+      const list = await listProjects();
+      set({ projectList: list });
+    } catch {
+      // 静默失败
+    }
+  },
+
+  deleteFromDB: async (id) => {
+    try {
+      await deleteProject(id);
+      set((s) => {
+        const list = s.projectList.filter((p) => p.id !== id);
+        // 如果删除的是当前项目，重置
+        if (s.projectId === id) {
+          return { projectList: list, projectId: null, projectName: "未命名项目", components: [], blueprint: null, selectedId: null };
+        }
+        return { projectList: list };
+      });
+    } catch {
+      console.error("IndexedDB 删除失败");
+    }
+  },
+
+  newProject: () => {
+    set({
+      projectId: null,
+      projectName: "未命名项目",
+      components: [],
+      blueprint: null,
+      selectedId: null,
+      saveStatus: "saved",
+      validations: [],
+    });
+  },
 }));
