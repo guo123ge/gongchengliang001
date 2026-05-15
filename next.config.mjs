@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'export',
+  basePath: '/gongchengliang001',
   trailingSlash: true,
   images: {
     unoptimized: true,
