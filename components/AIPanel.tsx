@@ -1,11 +1,202 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Bot, User as UserIcon, Sparkles, Settings } from "lucide-react";
+import { Send, Loader2, Bot, User as UserIcon, Sparkles, Settings, Zap, PlusCircle, Pencil, Trash2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useStore } from "@/lib/store";
 import type { Component } from "@/lib/types";
 import { loadAIConfig, saveAIConfig } from "./SettingsDialog";
 
 interface Msg { role: "user" | "assistant"; content: string }
+
+// ── AI 操作指令卡片 ──────────────────────────────────────────────
+
+function rebarLabel(r: any): string {
+  if (r.label) return r.label;
+  const parts: string[] = [`${r.role}`];
+  if (r.grade && r.diameter) parts.push(`${r.grade} Φ${r.diameter}`);
+  if (r.count) parts.push(`${r.count}根`);
+  if (r.spacing) parts.push(`@${r.spacing}mm`);
+  if (r.extension) parts.push(`ext=${r.extension}mm`);
+  return parts.join(" ");
+}
+
+function geomLabel(g: any): string {
+  const p: string[] = [];
+  if (g.b != null && g.h != null) p.push(`${g.b}×${g.h}`);
+  if (g.L != null) p.push(`L=${g.L}`);
+  if (g.Lx != null && g.Ly != null) p.push(`${g.Lx}×${g.Ly}`);
+  if (g.t != null) p.push(`t=${g.t}`);
+  if (g.D != null) p.push(`Φ${g.D}`);
+  if (g.hc != null) p.push(`hc=${g.hc}`);
+  return p.join(" mm, ") + (p.length ? " mm" : "");
+}
+
+function PatchField({ name, value }: { name: string; value: any }) {
+  if (name === "rebars" && Array.isArray(value)) {
+    return (
+      <div className="mt-1">
+        <span className="font-medium text-on-surface">钢筋：</span>
+        <ul className="mt-0.5 ml-3 space-y-0.5">
+          {value.map((r: any, i: number) => (
+            <li key={i} className="text-on-surface-variant">
+              <span className="font-mono">{rebarLabel(r)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (name === "geometry" && typeof value === "object") {
+    return (
+      <div className="mt-0.5 flex gap-1.5">
+        <span className="font-medium text-on-surface">尺寸：</span>
+        <span className="text-on-surface-variant font-mono">{geomLabel(value)}</span>
+      </div>
+    );
+  }
+  if (name === "concrete" && typeof value === "object") {
+    const parts = [value.grade, value.seismic !== "NONE" ? `抗震${value.seismic}级` : "非抗震", value.cover ? `c=${value.cover}mm` : ""].filter(Boolean);
+    return (
+      <div className="mt-0.5 flex gap-1.5">
+        <span className="font-medium text-on-surface">混凝土：</span>
+        <span className="text-on-surface-variant">{parts.join(" / ")}</span>
+      </div>
+    );
+  }
+  const str = typeof value === "object" ? JSON.stringify(value) : String(value);
+  const display = str.length > 80 ? str.slice(0, 80) + "…" : str;
+  return (
+    <div className="mt-0.5 flex gap-1.5">
+      <span className="font-medium text-on-surface">{name}：</span>
+      <span className="text-on-surface-variant font-mono break-all">{display}</span>
+    </div>
+  );
+}
+
+function OpItem({ op }: { op: any }) {
+  if (op.action === "create") {
+    const c = op.component ?? {};
+    return (
+      <div className="px-3 py-2 text-xs space-y-0.5">
+        <div className="flex items-center gap-1.5">
+          <PlusCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="font-semibold text-emerald-400">新建</span>
+          <span className="font-medium text-on-surface">{c.name ?? "—"}</span>
+          {c.type && <span className="text-on-surface-variant">({c.type})</span>}
+        </div>
+        {c.geometry && <PatchField name="geometry" value={c.geometry} />}
+        {c.concrete && <PatchField name="concrete" value={c.concrete} />}
+        {c.rebars && <PatchField name="rebars" value={c.rebars} />}
+      </div>
+    );
+  }
+  if (op.action === "delete") {
+    return (
+      <div className="px-3 py-2 text-xs flex items-center gap-1.5">
+        <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
+        <span className="font-semibold text-red-400">删除</span>
+        <span className="font-mono text-on-surface-variant">{op.id}</span>
+      </div>
+    );
+  }
+  if (op.action === "update" && op.patch) {
+    return (
+      <div className="px-3 py-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          <Pencil className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="font-semibold text-amber-400">更新</span>
+          <span className="font-mono text-on-surface-variant">{op.id}</span>
+        </div>
+        <div className="ml-5 mt-0.5 space-y-0.5">
+          {Object.entries(op.patch).map(([k, v]) => (
+            <PatchField key={k} name={k} value={v} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="px-3 py-2 text-xs font-mono text-on-surface-variant">{JSON.stringify(op)}</div>
+  );
+}
+
+function OpsCard({ ops }: { ops: any[] }) {
+  return (
+    <div className="my-2 rounded-lg border border-primary/25 bg-primary/5 overflow-hidden">
+      <div className="px-3 py-1.5 bg-primary/10 text-xs font-semibold text-primary flex items-center gap-1.5 border-b border-primary/20">
+        <Zap className="w-3.5 h-3.5" />
+        AI 操作指令（共 {ops.length} 条）
+      </div>
+      <div className="divide-y divide-outline-variant/20">
+        {ops.map((op: any, i: number) => <OpItem key={i} op={op} />)}
+      </div>
+    </div>
+  );
+}
+
+/** Markdown 渲染组件（AI 消息专用） */
+function MdContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p:       ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+        h1:      ({ children }) => <h1 className="text-base font-bold mb-2 mt-3 first:mt-0 border-b border-outline-variant/20 pb-1">{children}</h1>,
+        h2:      ({ children }) => <h2 className="text-sm font-bold mb-1.5 mt-3 first:mt-0">{children}</h2>,
+        h3:      ({ children }) => <h3 className="text-xs font-semibold mb-1 mt-2 first:mt-0 text-primary">{children}</h3>,
+        ul:      ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+        ol:      ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+        li:      ({ children }) => <li className="leading-relaxed">{children}</li>,
+        strong:  ({ children }) => <strong className="font-semibold text-on-surface">{children}</strong>,
+        em:      ({ children }) => <em className="italic text-on-surface-variant">{children}</em>,
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-primary/40 pl-3 my-2 text-on-surface-variant italic">{children}</blockquote>
+        ),
+        code: ({ inline, className, children, ...props }: any) => {
+          if (!inline) {
+            if (className === "language-json") {
+              const raw = String(children).replace(/\n$/, "");
+              try {
+                const ops = JSON.parse(raw);
+                if (Array.isArray(ops) && ops.length > 0 && ops[0]?.action) {
+                  return <OpsCard ops={ops} />;
+                }
+              } catch {}
+            }
+            return (
+              <code className="block bg-surface-container rounded p-2 my-2 text-[11px] font-mono leading-relaxed overflow-x-auto border border-outline-variant/20 whitespace-pre" {...props}>
+                {children}
+              </code>
+            );
+          }
+          return (
+            <code className="bg-surface-container px-1 py-0.5 rounded text-[11px] font-mono text-primary border border-outline-variant/20" {...props}>
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <>{children}</>,
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-2">
+            <table className="text-xs border-collapse w-full">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-surface-container">{children}</thead>,
+        th:    ({ children }) => <th className="border border-outline-variant/30 px-2 py-1 font-semibold text-left">{children}</th>,
+        td:    ({ children }) => <td className="border border-outline-variant/30 px-2 py-1">{children}</td>,
+        hr:    () => <hr className="border-outline-variant/20 my-3" />,
+        a:     ({ children, href }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 export default function AIPanel() {
   const components = useStore((s) => s.components);
@@ -202,12 +393,14 @@ export default function AIPanel() {
               )}
             </div>
             <div className={`flex-1 max-w-[85%] ${m.role === "user" ? "text-right" : ""}`}>
-              <div className={`inline-block rounded-lg px-3 py-2 whitespace-pre-wrap break-words leading-relaxed ${
+              <div className={`inline-block rounded-lg px-3 py-2 break-words leading-relaxed ${
                 m.role === "user"
-                  ? "bg-primary/10 text-on-surface border border-primary/20"
-                  : "bg-surface-container-high/50 text-on-surface border border-outline-variant/10"
+                  ? "bg-primary/10 text-on-surface border border-primary/20 whitespace-pre-wrap"
+                  : "bg-surface-container-high/50 text-on-surface border border-outline-variant/10 w-full"
               }`}>
-                {m.content}
+                {m.role === "user" ? m.content : (
+                  <MdContent content={m.content} />
+                )}
               </div>
             </div>
           </div>
@@ -226,8 +419,8 @@ export default function AIPanel() {
               </div>
             </div>
             <div className="flex-1 max-w-[85%]">
-              <div className="inline-block rounded-lg px-3 py-2 whitespace-pre-wrap break-words leading-relaxed bg-surface-container-high/50 text-on-surface border border-outline-variant/10">
-                {streamingContent}
+              <div className="rounded-lg px-3 py-2 break-words leading-relaxed bg-surface-container-high/50 text-on-surface border border-outline-variant/10 w-full">
+                <MdContent content={streamingContent} />
                 <span className="inline-block w-2 h-4 bg-primary/60 animate-pulse ml-0.5 rounded-sm" />
               </div>
             </div>

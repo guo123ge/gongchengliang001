@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Plus, X, Box, Square, Columns, Circle } from "lucide-react";
+import { Plus, X, Wand2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import type { Component, Rebar, RebarGrade } from "@/lib/types";
 import { autoFillRebar } from "@/lib/g101/autoRebar";
+import { parseRebarNotation, notationSummary } from "@/lib/g101/parseNotation";
 import { uid } from "@/lib/utils";
 
 const CONCRETE_GRADES = ["C20","C25","C30","C35","C40","C45","C50","C55","C60","C65","C70","C75","C80"];
@@ -14,10 +15,16 @@ const SEISMIC = [
 const ENV = ["Ia","Ib","IIa","IIb","IIIa","IIIb"];
 const GRADES: RebarGrade[] = ["HPB300","HRB400","HRB500"];
 const ROLES_BY_TYPE: Record<string, string[]> = {
-  BEAM: ["LONGITUDINAL","STIRRUP","ERECTION","BENT","SIDE","TIE","ADDITIONAL"],
-  COLUMN: ["MAIN","STIRRUP","CONSTRUCT_COL","TIE"],
-  SLAB: ["BOTTOM","TOP","DIST","NEG","CONSTRUCT","STOOL"],
-  PILE: ["MAIN","SPIRAL","STIFFEN","SONIC"],
+  BEAM:        ["LONGITUDINAL","STIRRUP","ERECTION","BENT","SIDE","TIE","ADDITIONAL"],
+  COLUMN:      ["MAIN","STIRRUP","CONSTRUCT_COL","TIE"],
+  SHEAR_WALL:  ["HORIZONTAL","VERTICAL","TIE"],
+  SLAB:        ["BOTTOM","TOP","DIST","NEG","CONSTRUCT","STOOL"],
+  STAIR:       ["LONGITUDINAL","DIST","CONSTRUCT"],
+  FOUND:       ["BOT_X","BOT_Y","TOP_X","TOP_Y","TIE"],
+  STRIP_FOUND: ["TRANSVERSE","LONGITUDINAL","CONSTRUCT"],
+  PILE_CAP:    ["BOT_X","BOT_Y","TOP_X","TOP_Y","TIE"],
+  PILE:        ["MAIN","SPIRAL","STIFFEN","SONIC"],
+  RAFT:        ["BOT_X","BOT_Y","TOP_X","TOP_Y","TIE","CONSTRUCT"],
 };
 
 type BasicTab = "geometry" | "concrete" | "section";
@@ -74,17 +81,29 @@ export default function ParamForm() {
         {basicTab === "geometry" && (
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
-              {c.type === "BEAM" || c.type === "COLUMN" ? (
+              {(c.type === "BEAM" || c.type === "COLUMN" || c.type === "SHEAR_WALL" || c.type === "STRIP_FOUND") ? (
                 <>
-                  <Field label="b 宽"><input type="number" className="input-eng" value={c.geometry.b ?? 0} onChange={(e) => setGeom("b", +e.target.value)} /></Field>
-                  <Field label="h 高"><input type="number" className="input-eng" value={c.geometry.h ?? 0} onChange={(e) => setGeom("h", +e.target.value)} /></Field>
-                  <Field label="L 长"><input type="number" className="input-eng" value={c.geometry.L ?? 0} onChange={(e) => setGeom("L", +e.target.value)} /></Field>
+                  <Field label={c.type === "SHEAR_WALL" ? "b 厚度" : "b 宽"}><input type="number" className="input-eng" value={c.geometry.b ?? 0} onChange={(e) => setGeom("b", +e.target.value)} /></Field>
+                  <Field label={c.type === "SHEAR_WALL" ? "h 层高" : c.type === "STRIP_FOUND" ? "h 高度" : "h 高"}><input type="number" className="input-eng" value={c.geometry.h ?? 0} onChange={(e) => setGeom("h", +e.target.value)} /></Field>
+                  <Field label={c.type === "SHEAR_WALL" ? "L 墙长" : c.type === "STRIP_FOUND" ? "L 总长" : "L 长"}><input type="number" className="input-eng" value={c.geometry.L ?? 0} onChange={(e) => setGeom("L", +e.target.value)} /></Field>
+                  {c.type === "BEAM" && (
+                    <Field label="hc 支座柱宽(mm)">
+                      <input type="number" className="input-eng" value={c.geometry.hc ?? 500} onChange={(e) => setGeom("hc", +e.target.value)} />
+                    </Field>
+                  )}
                 </>
-              ) : c.type === "SLAB" ? (
+              ) : (c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT") ? (
                 <>
-                  <Field label="Lx"><input type="number" className="input-eng" value={c.geometry.Lx ?? 0} onChange={(e) => setGeom("Lx", +e.target.value)} /></Field>
-                  <Field label="Ly"><input type="number" className="input-eng" value={c.geometry.Ly ?? 0} onChange={(e) => setGeom("Ly", +e.target.value)} /></Field>
-                  <Field label="t 厚"><input type="number" className="input-eng" value={c.geometry.t ?? 0} onChange={(e) => setGeom("t", +e.target.value)} /></Field>
+                  <Field label="Lx (mm)"><input type="number" className="input-eng" value={c.geometry.Lx ?? 0} onChange={(e) => setGeom("Lx", +e.target.value)} /></Field>
+                  <Field label="Ly (mm)"><input type="number" className="input-eng" value={c.geometry.Ly ?? 0} onChange={(e) => setGeom("Ly", +e.target.value)} /></Field>
+                  <Field label={c.type === "SLAB" ? "t 厚" : "t 高度"}><input type="number" className="input-eng" value={c.geometry.t ?? 0} onChange={(e) => setGeom("t", +e.target.value)} /></Field>
+                </>
+              ) : c.type === "STAIR" ? (
+                <>
+                  <Field label="b 宽(mm)"><input type="number" className="input-eng" value={c.geometry.b ?? 0} onChange={(e) => setGeom("b", +e.target.value)} /></Field>
+                  <Field label="L 水平长"><input type="number" className="input-eng" value={c.geometry.L ?? 0} onChange={(e) => setGeom("L", +e.target.value)} /></Field>
+                  <Field label="h 踏步高"><input type="number" className="input-eng" value={c.geometry.h ?? 0} onChange={(e) => setGeom("h", +e.target.value)} /></Field>
+                  <Field label="t 板厚"><input type="number" className="input-eng" value={c.geometry.t ?? 0} onChange={(e) => setGeom("t", +e.target.value)} /></Field>
                 </>
               ) : (
                 <>
@@ -199,28 +218,106 @@ export default function ParamForm() {
 
         {rebarTab === "inSitu" && (
           <div className="space-y-2">
+            <div className="text-xs text-on-surface-variant bg-surface-container-highest/40 rounded-lg px-3 py-2 border border-outline-variant/10">
+              输入平法标注（如 <span className="font-mono text-primary">2Φ25</span>、<span className="font-mono text-primary">Φ8@100/200(2)</span>），
+              点击 <Wand2 className="w-3 h-3 inline text-secondary" /> 自动解析并同步钢筋参数。
+            </div>
             {c.rebars.length === 0 && <div className="text-xs text-on-surface-variant py-2">暂无钢筋。</div>}
-            {c.rebars.map((r) => (
-              <div key={r.id} className="flex items-center gap-2 bg-surface-container-high/50 rounded-lg p-2 border border-outline-variant/10">
-                <span className="text-xs text-on-surface-variant w-16 shrink-0">{roleName(r.role)}</span>
-                <span className="text-xs text-primary font-mono w-14 shrink-0">{r.grade}-{r.diameter}</span>
-                <input className="input-eng" value={r.label ?? ""} placeholder="如 2C25+2C22" onChange={(e) => updRebar(r.id, { label: e.target.value })} />
-              </div>
-            ))}
+            {c.rebars.map((r) => {
+              const parsed = r.label ? parseRebarNotation(r.label) : null;
+              return (
+                <div key={r.id} className="bg-surface-container-high/50 rounded-lg p-2 border border-outline-variant/10 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-on-surface-variant w-16 shrink-0">{roleName(r.role)}</span>
+                    <span className="text-xs text-primary font-mono w-20 shrink-0">{r.grade}-Φ{r.diameter}</span>
+                    <input
+                      className="input-eng flex-1"
+                      value={r.label ?? ""}
+                      placeholder="如 2Φ25 或 Φ8@100/200(2)"
+                      onChange={(e) => updRebar(r.id, { label: e.target.value })}
+                    />
+                    <button
+                      className="shrink-0 p-1.5 rounded-md bg-secondary/10 hover:bg-secondary/20 text-secondary transition-colors"
+                      title="解析并应用标注"
+                      onClick={() => {
+                        if (!r.label) return;
+                        const p = parseRebarNotation(r.label);
+                        if (!p.valid) return;
+                        const patch: Partial<typeof r> = {};
+                        if (p.grade) patch.grade = p.grade;
+                        if (p.diameter) patch.diameter = p.diameter;
+                        if (p.count) patch.count = p.count;
+                        if (p.spacing) patch.spacing = p.spacing;
+                        if (p.densifySpacing) patch.densifySpacing = p.densifySpacing;
+                        updRebar(r.id, patch);
+                      }}
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {parsed?.valid && (
+                    <div className="text-[10px] font-mono text-secondary/80 px-1">
+                      解析：{notationSummary(parsed)}
+                      {parsed.grade && ` · ${parsed.grade}`}
+                      {parsed.diameter && ` · Φ${parsed.diameter}`}
+                      {parsed.count && ` · ${parsed.count}根`}
+                      {parsed.spacing && ` · @${parsed.spacing}`}
+                      {parsed.densifySpacing && `/${parsed.densifySpacing}(加密)`}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
         {rebarTab === "central" && (
           <div className="space-y-2">
             <div className="text-xs text-on-surface-variant">
-              集中标注通常包含梁编号、截面尺寸、箍筋、通长筋等信息，用于施工图表达。
+              集中标注包含梁编号、截面尺寸、箍筋、通长筋等，输入后点击「解析并应用」自动同步到钢筋参数。
             </div>
             <textarea
-              className="input-eng w-full min-h-[80px] resize-y"
+              className="input-eng w-full min-h-[80px] resize-y font-mono"
               value={c.centralLabel ?? ""}
               placeholder={`如：KL1(2) 300×600\nΦ8@100/200(2)\n2C25; 2C22`}
               onChange={(e) => patch({ centralLabel: e.target.value })}
             />
+            <button
+              className="btn-secondary text-xs w-full flex items-center justify-center gap-1.5"
+              onClick={() => {
+                const text = c.centralLabel ?? "";
+                if (!text.trim()) return;
+                const lines = text.split(/[\n;,]/).map((l) => l.trim()).filter(Boolean);
+                const updates: { idx: number; parsed: ReturnType<typeof parseRebarNotation> }[] = [];
+                let rebarIdx = 0;
+                for (const line of lines) {
+                  const parsed = parseRebarNotation(line);
+                  if (parsed.valid && rebarIdx < c.rebars.length) {
+                    updates.push({ idx: rebarIdx, parsed });
+                    rebarIdx++;
+                  }
+                }
+                if (updates.length > 0) {
+                  const newRebars = c.rebars.map((r, i) => {
+                    const upd = updates.find((u) => u.idx === i);
+                    if (!upd) return r;
+                    const p = upd.parsed;
+                    return {
+                      ...r,
+                      ...(p.grade ? { grade: p.grade } : {}),
+                      ...(p.diameter ? { diameter: p.diameter } : {}),
+                      ...(p.count ? { count: p.count } : {}),
+                      ...(p.spacing ? { spacing: p.spacing } : {}),
+                      ...(p.densifySpacing ? { densifySpacing: p.densifySpacing } : {}),
+                      label: p.label,
+                    };
+                  });
+                  patch({ rebars: newRebars });
+                }
+              }}
+            >
+              <Wand2 className="w-3.5 h-3.5" />解析并应用到钢筋参数
+            </button>
           </div>
         )}
       </div>
@@ -228,56 +325,45 @@ export default function ParamForm() {
   );
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  BEAM: "矩形截面框架梁", COLUMN: "矩形截面框架柱",
+  SHEAR_WALL: "剪力墙", SLAB: "楼板", STAIR: "AT型楼梯",
+  FOUND: "独立基础", STRIP_FOUND: "条形基础", PILE_CAP: "桩基承台",
+  PILE: "圆形截面桩", RAFT: "筏板基础",
+};
+
 function SectionShape({ c, setGeom }: { c: Component; setGeom: (k: keyof Component["geometry"], v: number) => void }) {
   const geom = c.geometry;
-  const typeLabel = c.type === "BEAM" ? "矩形截面梁" : c.type === "COLUMN" ? "矩形截面柱" : c.type === "SLAB" ? "矩形板" : "圆形截面桩";
+  const isCircle = c.type === "PILE";
+  const isPlanRect = c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT";
 
   return (
     <div className="space-y-3">
-      <div className="text-label-code text-on-surface-variant">{typeLabel}</div>
+      <div className="text-label-code text-on-surface-variant">{TYPE_LABELS[c.type] ?? c.type}</div>
       <div className="flex justify-center py-3 bg-surface-container-high/30 rounded-lg border border-outline-variant/10">
-        {c.type === "PILE" ? (
-          <div className="flex flex-col items-center gap-1">
-            <svg width="80" height="80" viewBox="0 0 80 80">
-              <circle cx="40" cy="40" r="35" fill="none" stroke="#8c909f" strokeWidth="2" />
-              <text x="40" y="44" textAnchor="middle" fill="#d4e4fa" fontSize="12" fontFamily="JetBrains Mono">D={geom.D}</text>
-            </svg>
-          </div>
-        ) : c.type === "SLAB" ? (
-          <div className="flex flex-col items-center gap-1">
-            <svg width="100" height="60" viewBox="0 0 100 60">
-              <rect x="5" y="5" width="90" height="50" fill="none" stroke="#8c909f" strokeWidth="2" />
-              <text x="50" y="35" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.Lx} × {geom.Ly}</text>
-            </svg>
-          </div>
+        {isCircle ? (
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="35" fill="none" stroke="#8c909f" strokeWidth="2" />
+            <text x="40" y="44" textAnchor="middle" fill="#d4e4fa" fontSize="11" fontFamily="JetBrains Mono">D={geom.D}</text>
+          </svg>
+        ) : isPlanRect ? (
+          <svg width="110" height="70" viewBox="0 0 110 70">
+            <rect x="5" y="5" width="100" height="60" fill="none" stroke="#8c909f" strokeWidth="2" />
+            <text x="55" y="38" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.Lx} × {geom.Ly}</text>
+            <text x="55" y="52" textAnchor="middle" fill="#8c909f" fontSize="9" fontFamily="JetBrains Mono">t={geom.t}</text>
+          </svg>
+        ) : c.type === "STAIR" ? (
+          <svg width="110" height="70" viewBox="0 0 110 70">
+            <polyline points="10,60 10,45 35,45 35,30 60,30 60,15 85,15 85,10 100,10" fill="none" stroke="#8c909f" strokeWidth="2" />
+            <text x="55" y="68" textAnchor="middle" fill="#d4e4fa" fontSize="9" fontFamily="JetBrains Mono">b={geom.b} L={geom.L}</text>
+          </svg>
         ) : (
-          <div className="flex flex-col items-center gap-1">
-            <svg width="100" height="80" viewBox="0 0 100 80">
-              <rect x="10" y="10" width="80" height="60" fill="none" stroke="#8c909f" strokeWidth="2" />
-              <text x="50" y="42" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.b} × {geom.h}</text>
-            </svg>
-          </div>
+          <svg width="100" height="80" viewBox="0 0 100 80">
+            <rect x="10" y="10" width="80" height="60" fill="none" stroke="#8c909f" strokeWidth="2" />
+            <text x="50" y="42" textAnchor="middle" fill="#d4e4fa" fontSize="10" fontFamily="JetBrains Mono">{geom.b} × {geom.h}</text>
+          </svg>
         )}
       </div>
-      {/* 截面尺寸输入 */}
-      {c.type === "BEAM" || c.type === "COLUMN" ? (
-        <div className="grid grid-cols-3 gap-2">
-          <Field label="b 宽 (mm)"><input type="number" className="input-eng" value={geom.b ?? 0} onChange={(e) => setGeom("b", +e.target.value)} /></Field>
-          <Field label="h 高 (mm)"><input type="number" className="input-eng" value={geom.h ?? 0} onChange={(e) => setGeom("h", +e.target.value)} /></Field>
-          <Field label="L 长 (mm)"><input type="number" className="input-eng" value={geom.L ?? 0} onChange={(e) => setGeom("L", +e.target.value)} /></Field>
-        </div>
-      ) : c.type === "SLAB" ? (
-        <div className="grid grid-cols-3 gap-2">
-          <Field label="Lx (mm)"><input type="number" className="input-eng" value={geom.Lx ?? 0} onChange={(e) => setGeom("Lx", +e.target.value)} /></Field>
-          <Field label="Ly (mm)"><input type="number" className="input-eng" value={geom.Ly ?? 0} onChange={(e) => setGeom("Ly", +e.target.value)} /></Field>
-          <Field label="t 厚 (mm)"><input type="number" className="input-eng" value={geom.t ?? 0} onChange={(e) => setGeom("t", +e.target.value)} /></Field>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="D 直径 (mm)"><input type="number" className="input-eng" value={geom.D ?? 0} onChange={(e) => setGeom("D", +e.target.value)} /></Field>
-          <Field label="L 桩长 (mm)"><input type="number" className="input-eng" value={geom.L ?? 0} onChange={(e) => setGeom("L", +e.target.value)} /></Field>
-        </div>
-      )}
     </div>
   );
 }
@@ -295,7 +381,10 @@ function roleName(r: string) {
     TOP: "面筋", BOTTOM: "底筋", SIDE: "腰筋", STIRRUP: "箍筋", MAIN: "纵筋", DIST: "分布筋",
     SPIRAL: "螺旋箍", NEG: "支座负筋",
     LONGITUDINAL: "纵向受力筋", ERECTION: "架立筋", BENT: "弯起筋", TIE: "拉筋", ADDITIONAL: "附加筋",
-    CONSTRUCT: "构造钢筋", STOOL: "马凳筋",
-    CONSTRUCT_COL: "纵向构造筋", STIFFEN: "加劲箍", SONIC: "声测钢管",
+    CONSTRUCT: "构造配筋", STOOL: "马凳筋",
+    CONSTRUCT_COL: "纵向构造筋", STIFFEN: "加劲箍", SONIC: "声测管",
+    HORIZONTAL: "水平分布筋", VERTICAL: "竖向分布筋", TRANSVERSE: "横向受力筋",
+    BOT_X: "底板X向筋", BOT_Y: "底板Y向筋",
+    TOP_X: "顶板X向筋", TOP_Y: "顶板Y向筋",
   } as any)[r] ?? r;
 }

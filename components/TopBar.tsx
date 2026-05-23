@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  HardHat, Save, FolderOpen, FileSpreadsheet, FileText, Sparkles, Settings,
+  HardHat, Save, FolderOpen, FileSpreadsheet, FileText, Settings,
   CheckCircle, Loader2, CircleDot, ChevronDown, Plus, FileImage, FileUp,
-  RotateCcw, Eye,
+  RotateCcw, Eye, Info,
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcAll } from "@/lib/quantity/calc";
@@ -69,8 +69,7 @@ export default function TopBar() {
   const setProjectName = useStore((s) => s.setProjectName);
   const components = useStore((s) => s.components);
   const validations = useStore((s) => s.validations);
-  const setAiOpen = useStore((s) => s.setAiOpen);
-  const aiOpen = useStore((s) => s.aiOpen);
+  const setLandingOpen = useStore((s) => s.setLandingOpen);
   const saveToDB = useStore((s) => s.saveToDB);
   const saveStatus = useStore((s) => s.saveStatus);
   const listFromDB = useStore((s) => s.listFromDB);
@@ -240,10 +239,11 @@ export default function TopBar() {
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
         <button
-          className={aiOpen ? "btn-primary" : "btn-secondary"}
-          onClick={() => setAiOpen(!aiOpen)}
+          className="p-2 hover:bg-surface-container-high/50 rounded-full transition-colors text-on-surface-variant"
+          onClick={() => setLandingOpen(true)}
+          title="关于"
         >
-          <Sparkles className="w-4 h-4" />AI
+          <Info className="w-5 h-5" />
         </button>
         <button
           className="p-2 hover:bg-surface-container-high/50 rounded-full transition-colors text-on-surface-variant"

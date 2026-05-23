@@ -1,13 +1,17 @@
 "use client";
+import { useState } from "react";
 import { Eye, EyeOff, Scissors, Move3d, RotateCw, Image as ImageIcon, Trash2, Magnet, Lock, Unlock, Ruler, AlertTriangle } from "lucide-react";
 import { useStore } from "@/lib/store";
 
 export default function SceneToolbar() {
+  const [opacityOpen, setOpacityOpen] = useState(false);
   const showConcrete = useStore((s) => s.showConcrete);
   const showRebar = useStore((s) => s.showRebar);
   const showDimensions = useStore((s) => s.showDimensions);
   const showCollisions = useStore((s) => s.showCollisions);
   const toggleConcrete = useStore((s) => s.toggleConcrete);
+  const concreteOpacity = useStore((s) => s.concreteOpacity);
+  const setConcreteOpacity = useStore((s) => s.setConcreteOpacity);
   const toggleRebar = useStore((s) => s.toggleRebar);
   const toggleDimensions = useStore((s) => s.toggleDimensions);
   const toggleCollisions = useStore((s) => s.toggleCollisions);
@@ -23,14 +27,32 @@ export default function SceneToolbar() {
   return (
     <div className="absolute top-4 left-4 glass-panel rounded-lg p-2 flex items-center gap-1.5 text-xs z-10">
       {/* Visibility Controls */}
-      <button
-        className={showConcrete ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
-        onClick={toggleConcrete}
-        title="切换混凝土显隐"
-      >
-        {showConcrete ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-        <span className="hidden sm:inline">混凝土</span>
-      </button>
+      <div className="relative">
+        <button
+          className={showConcrete ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
+          onClick={() => { toggleConcrete(); setOpacityOpen((v) => !v); }}
+          title="切换混凝土显隐 / 透明度"
+        >
+          {showConcrete ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+          <span className="hidden sm:inline">混凝土</span>
+        </button>
+        {opacityOpen && showConcrete && (
+          <div className="absolute top-full left-0 mt-1.5 p-2 glass-panel rounded-lg w-40 z-20">
+            <div className="text-[10px] text-on-surface-variant mb-1 flex justify-between">
+              <span>透明度</span>
+              <span className="font-mono">{Math.round(concreteOpacity * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              value={Math.round(concreteOpacity * 100)}
+              onChange={(e) => setConcreteOpacity(+e.target.value / 100)}
+              className="w-full h-1 appearance-none rounded-full bg-outline-variant/30 accent-primary cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+            />
+          </div>
+        )}
+      </div>
       <button
         className={showRebar ? "btn-glass bg-primary/10 text-primary" : "btn-glass"}
         onClick={toggleRebar}

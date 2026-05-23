@@ -1,6 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import LeftTree from "@/components/LeftTree";
 import RightPanel from "@/components/RightPanel";
@@ -8,9 +9,13 @@ import BottomBar from "@/components/BottomBar";
 import SceneToolbar from "@/components/SceneToolbar";
 import LegendOverlay from "@/components/LegendOverlay";
 import WelcomeEmpty from "@/components/WelcomeEmpty";
+import LandingOverlay from "@/components/LandingOverlay";
+import RebarInfoPopup from "@/components/RebarInfoPopup";
 import { useStore } from "@/lib/store";
 
 const Scene3D = dynamic(() => import("@/components/Scene3D"), { ssr: false });
+
+const STORAGE_KEY = "bimcore_landing_seen";
 
 export default function Home() {
   const components = useStore((s) => s.components);
@@ -18,11 +23,38 @@ export default function Home() {
   const bottomPanelOpen = useStore((s) => s.bottomPanelOpen);
   const toggleLeftPanel = useStore((s) => s.toggleLeftPanel);
   const toggleBottomPanel = useStore((s) => s.toggleBottomPanel);
+  const landingOpen = useStore((s) => s.landingOpen);
+  const setLandingOpen = useStore((s) => s.setLandingOpen);
+
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(STORAGE_KEY)) {
+        setLandingOpen(true);
+      }
+    } catch {}
+  }, [setLandingOpen]);
 
   const [leftWidth, setLeftWidth] = useState(288);
   const [rightWidth, setRightWidth] = useState(320);
   const [bottomHeight, setBottomHeight] = useState(250);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      viewportRef.current?.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   const prevLeft = useRef(288);
   const prevRight = useRef(320);
@@ -109,6 +141,7 @@ export default function Home() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-background">
+      <LandingOverlay open={landingOpen} onClose={() => setLandingOpen(false)} />
       {/* ─── TopNavBar ─── */}
       <TopBar />
 
@@ -134,7 +167,7 @@ export default function Home() {
         {/* Center Column (Viewport & Data) */}
         <div className="flex-1 relative min-w-0 flex flex-col bg-surface">
           {/* 3D Viewport */}
-          <div className="flex-1 relative overflow-hidden">
+          <div ref={viewportRef} className="flex-1 relative overflow-hidden">
             {components.length === 0 ? (
               <WelcomeEmpty />
             ) : (
@@ -142,8 +175,15 @@ export default function Home() {
                 <Scene3D />
                 <SceneToolbar />
                 <LegendOverlay />
-
-                              </>
+                <RebarInfoPopup />
+                <button
+                  onClick={toggleFullscreen}
+                  className="absolute top-2 right-2 z-30 p-1.5 rounded bg-black/30 hover:bg-black/50 text-white/80 hover:text-white transition-colors"
+                  title={isFullscreen ? "退出全屏" : "全屏显示"}
+                >
+                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+              </>
             )}
           </div>
 

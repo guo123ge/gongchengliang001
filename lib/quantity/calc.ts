@@ -1,6 +1,15 @@
 // 工程量计算（阶段 A + B）
 import type { Component, QuantityResult, Rebar } from "../types";
-import { REBAR_UNIT_WEIGHT, La, stirrupHookLength, pileEmbedDepth } from "../g101/tables";
+import { REBAR_UNIT_WEIGHT, La, LaE, stirrupHookLength, pileEmbedDepth } from "../g101/tables";
+
+/** 框架梁端支座纵筋锚固长度 — 22G101-1 第2-39页
+ *  直锚条件：hc - cover ≥ laE
+ *  弯锚：水平段 = max(0.4×laE, hc-cover)，竖直弯折 ≥ 15d */
+function beamEndAnchor(hc: number, cover: number, laE_val: number, d: number): number {
+  const horiz = hc - cover;                             // 水平直段长度
+  if (horiz >= laE_val) return laE_val;                  // 直锚
+  return Math.max(0.4 * laE_val, horiz) + 15 * d;       // 弯锚
+}
 
 /** 构件几何体积 m³ 与模板面积 m² */
 function geomMetrics(c: Component): { volume: number; formwork: number } {
@@ -23,6 +32,37 @@ function geomMetrics(c: Component): { volume: number; formwork: number } {
     const D = (g.D ?? 0) / 1000;
     const L = (g.L ?? 0) / 1000;
     return { volume: Math.PI * (D / 2) ** 2 * L, formwork: Math.PI * D * L };
+  }
+  if (c.type === "SHEAR_WALL") {
+    const b = (g.b ?? 0) / 1000;  // 厚度
+    const h = (g.h ?? 0) / 1000;  // 层高
+    const L = (g.L ?? 0) / 1000;  // 长度
+    return { volume: b * h * L, formwork: 2 * h * L };
+  }
+  if (c.type === "STAIR") {
+    // 斜板简化：水平投影面积 × 板厚
+    const b = (g.b ?? 0) / 1000;
+    const L = (g.L ?? 0) / 1000;
+    const t = (g.t ?? 0) / 1000;
+    return { volume: b * L * t, formwork: b * L };
+  }
+  if (c.type === "FOUND" || c.type === "PILE_CAP") {
+    const Lx = (g.Lx ?? 0) / 1000;
+    const Ly = (g.Ly ?? 0) / 1000;
+    const t = (g.t ?? 0) / 1000;
+    return { volume: Lx * Ly * t, formwork: 2 * (Lx + Ly) * t };
+  }
+  if (c.type === "STRIP_FOUND") {
+    const b = (g.b ?? 0) / 1000;
+    const h = (g.h ?? 0) / 1000;
+    const L = (g.L ?? 0) / 1000;
+    return { volume: b * h * L, formwork: (2 * h + b) * L };
+  }
+  if (c.type === "RAFT") {
+    const Lx = (g.Lx ?? 0) / 1000;
+    const Ly = (g.Ly ?? 0) / 1000;
+    const t = (g.t ?? 0) / 1000;
+    return { volume: Lx * Ly * t, formwork: Lx * Ly + 2 * (Lx + Ly) * t };
   }
   return { volume: 0, formwork: 0 };
 }
@@ -64,6 +104,30 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
       const perBar = L + 2 * 15 * r.diameter;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
+    // ── BEAM 上/下部纵筋精确锚固 ── 22G101-1 第2-39页
+    if (c.type === "BEAM") {
+      const hc = g.hc ?? 500;  // 支座柱截面宽，默认 500mm
+      const laE_val = seismic
+        ? LaE(c.concrete.grade, r.grade, r.diameter, c.concrete.seismic)
+        : la;
+      if (r.role === "TOP" || r.role === "BENT" || r.role === "ADDITIONAL") {
+        // 上部主筋/弯起筋/附加筋：两端入柱锚固（弯锚或直锚）
+        const anchor = beamEndAnchor(hc, cover, laE_val, r.diameter);
+        const n = r.count ?? 0;
+        return { totalLenM: ((L + 2 * anchor) * n) / 1000, countTotal: n };
+      }
+      if (r.role === "ERECTION") {
+        // 架立筋：与上部通长筋搭接，每端搭接 150mm — 22G101-1 第2-39页
+        const n = r.count ?? 0;
+        return { totalLenM: ((L + 2 * 150) * n) / 1000, countTotal: n };
+      }
+      if (r.role === "BOTTOM") {
+        // 下部纵筋：端支座锚固同上部主筋规则
+        const anchor = beamEndAnchor(hc, cover, laE_val, r.diameter);
+        const n = r.count ?? 0;
+        return { totalLenM: ((L + 2 * anchor) * n) / 1000, countTotal: n };
+      }
+    }
     const n = r.count ?? 0;
     const perBar = L + 2 * la;
     return { totalLenM: (perBar * n) / 1000, countTotal: n };
@@ -85,6 +149,108 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
       const anchor = Math.max(200 / 2, 5 * r.diameter);
       const perBar = Lx + 2 * anchor;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    return { totalLenM: 0, countTotal: 0 };
+  }
+
+  if (c.type === "SHEAR_WALL") {
+    const L = g.L ?? 0;
+    const h = g.h ?? 0;
+    if (r.role === "HORIZONTAL") {
+      // 水平分布筋：沿层高布置，每根长=墙长+两端锚固
+      const n = r.spacing ? Math.floor(h / r.spacing) + 1 : 0;
+      const perBar = L + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "VERTICAL") {
+      // 竖向分布筋：沿墙长布置，每根高=层高+搭接
+      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const perBar = h + 1.2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "TIE") {
+      // 拉筋：梅花形布置，双向间距 spacing
+      const nH = r.spacing ? Math.floor(h / r.spacing) + 1 : 0;
+      const nL = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const n = nH * nL;
+      const perBar = (g.b ?? 200) + 2 * 6 * r.diameter;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    return { totalLenM: 0, countTotal: 0 };
+  }
+
+  if (c.type === "STAIR") {
+    const b = g.b ?? 0;  // 梯板宽
+    const L = g.L ?? 0;  // 水平总长
+    if (r.role === "LONGITUDINAL") {
+      const n = r.spacing ? Math.floor(b / r.spacing) + 1 : 0;
+      const perBar = L + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "DIST") {
+      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const perBar = b;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    return { totalLenM: 0, countTotal: 0 };
+  }
+
+  if (c.type === "FOUND" || c.type === "PILE_CAP") {
+    const Lx = g.Lx ?? 0;
+    const Ly = g.Ly ?? 0;
+    if (r.role === "BOT_X" || r.role === "TOP_X") {
+      const n = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const perBar = Lx + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "BOT_Y" || r.role === "TOP_Y") {
+      const n = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const perBar = Ly + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "TIE") {
+      const nX = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const nY = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const t = g.t ?? 0;
+      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * nX * nY) / 1000, countTotal: nX * nY };
+    }
+    return { totalLenM: 0, countTotal: 0 };
+  }
+
+  if (c.type === "STRIP_FOUND") {
+    const b = g.b ?? 0;
+    const L = g.L ?? 0;
+    if (r.role === "TRANSVERSE") {
+      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const perBar = b + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "LONGITUDINAL") {
+      const n = r.count ?? 0;
+      const perBar = L + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    return { totalLenM: 0, countTotal: 0 };
+  }
+
+  if (c.type === "RAFT") {
+    const Lx = g.Lx ?? 0;
+    const Ly = g.Ly ?? 0;
+    if (r.role === "BOT_X" || r.role === "TOP_X") {
+      const n = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const perBar = Lx + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "BOT_Y" || r.role === "TOP_Y") {
+      const n = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const perBar = Ly + 2 * la;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "TIE") {
+      const nX = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const nY = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const t = g.t ?? 0;
+      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * nX * nY) / 1000, countTotal: nX * nY };
     }
     return { totalLenM: 0, countTotal: 0 };
   }

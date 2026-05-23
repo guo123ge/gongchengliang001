@@ -24,6 +24,7 @@ export default function Scene3D() {
 
   const components = useStore((s) => s.components);
   const showConcrete = useStore((s) => s.showConcrete);
+  const concreteOpacity = useStore((s) => s.concreteOpacity);
   const showRebar = useStore((s) => s.showRebar);
   const showCollisions = useStore((s) => s.showCollisions);
   const selectedId = useStore((s) => s.selectedId);
@@ -31,6 +32,8 @@ export default function Scene3D() {
   const updateComponent = useStore((s) => s.updateComponent);
   const clip = useStore((s) => s.clip);
   const setClip = useStore((s) => s.setClip);
+  const selectedRebarId = useStore((s) => s.selectedRebarId);
+  const setSelectedRebar = useStore((s) => s.setSelectedRebar);
   const gizmoMode = useStore((s) => s.gizmoMode);
   const cameraView = useStore((s) => s.cameraView);
   const setCameraView = useStore((s) => s.setCameraView);
@@ -58,12 +61,24 @@ export default function Scene3D() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(w, h);
     renderer.localClippingEnabled = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
     dir.position.set(10, 20, 10);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024, 1024);
     scene.add(dir);
+    const fill = new THREE.DirectionalLight(0xc8d8f0, 0.5);
+    fill.position.set(-8, 5, -12);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xfff0e0, 0.3);
+    rim.position.set(0, -10, 8);
+    scene.add(rim);
 
     const grid = new THREE.GridHelper(40, 40, 0x334155, 0x1e293b);
     (grid.material as THREE.Material).transparent = true;
@@ -139,17 +154,24 @@ export default function Scene3D() {
     scene.add((tcomp as any).getHelper ? (tcomp as any).getHelper() : (tcomp as any));
     tcompRef.current = tcomp;
 
-    // 剖切面可视化 + TransformControls
+    // 剖切面可视化 + TransformControls（淡化面 + 边框线）
+    const _clipPlaneGeo = new THREE.PlaneGeometry(6, 6);
     const clipMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 20),
+      _clipPlaneGeo,
       new THREE.MeshBasicMaterial({
-        color: 0xfbbf24,
+        color: 0x93c5fd,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.05,
         side: THREE.DoubleSide,
         depthWrite: false,
       }),
     );
+    // 边框线（同平面几何体，跟随父对象变换）
+    const clipEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(_clipPlaneGeo),
+      new THREE.LineBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.35 }),
+    );
+    clipMesh.add(clipEdge);
     clipMesh.userData.kind = "clip";
     clipMesh.visible = false;
     scene.add(clipMesh);
@@ -227,6 +249,8 @@ export default function Scene3D() {
     const mouse = new THREE.Vector2();
     let downX = 0, downY = 0;
     const onDown = (e: MouseEvent) => { downX = e.clientX; downY = e.clientY; };
+    // 钢筋线的射线检测灵敏度
+    ray.params.Line = { threshold: 0.04 };
     const onUp = (e: MouseEvent) => {
       // 拖动则不触发选择
       if (Math.abs(e.clientX - downX) + Math.abs(e.clientY - downY) > 4) return;
@@ -238,21 +262,37 @@ export default function Scene3D() {
       ray.setFromCamera(mouse, camera);
       const hits = ray.intersectObjects(group.children, true);
       if (hits.length > 0) {
-        // 先尝试 InstancedMesh 命中（instanceIndex → componentId）
         const first = hits[0];
         const obj = first.object;
+
+        // 1. 优先检测钢筋线命中（向上遍历找 kind=="rebar" 的 Group）
+        let rebarTarget: THREE.Object3D | null = first.object;
+        while (rebarTarget && rebarTarget.userData.kind !== "rebar") rebarTarget = rebarTarget.parent;
+        if (rebarTarget?.userData.kind === "rebar") {
+          const rid = rebarTarget.userData.rebarId as string;
+          const cid = rebarTarget.userData.componentId as string;
+          const cur = useStore.getState().selectedRebarId;
+          useStore.getState().setSelectedRebar(cur === rid ? null : rid, cur === rid ? null : cid);
+          return;
+        }
+
+        // 2. InstancedMesh 混凝土命中
         if (obj.userData.kind === "instanced-concrete" && obj.userData.componentIds) {
           const ids = obj.userData.componentIds as string[];
           const idx = first.instanceId;
           if (idx != null && ids[idx]) {
+            useStore.getState().setSelectedRebar(null);
             select(ids[idx]);
             return;
           }
         }
-        // 回退到传统 Object3D 遍历查找
+        // 3. 传统 Object3D 遍历查找构件
         let target: THREE.Object3D | null = first.object;
         while (target && !target.userData.componentId) target = target.parent;
-        if (target?.userData.componentId) select(target.userData.componentId);
+        if (target?.userData.componentId) {
+          useStore.getState().setSelectedRebar(null);
+          select(target.userData.componentId);
+        }
       }
     };
     renderer.domElement.addEventListener("pointerdown", onDown);
@@ -315,24 +355,14 @@ export default function Scene3D() {
       const { concreteInstances, rebarObjects } = buildInstancedScene(components, selectedId, {
         showConcrete,
         showRebar,
+        concreteOpacity,
       });
 
-      const clipPlanes = clip.enabled ? [getClipPlane(clip.axis, clip.position)] : [];
-
-      for (const im of concreteInstances) {
-        // 应用剖切面
-        (im.material as THREE.MeshStandardMaterial).clippingPlanes = clipPlanes;
+        for (const im of concreteInstances) {
         group.add(im);
       }
 
       for (const ro of rebarObjects) {
-        // 将钢筋放到正确位置
-        ro.traverse((o: any) => {
-          if (o.material) {
-            if (Array.isArray(o.material)) o.material.forEach((m: any) => (m.clippingPlanes = clipPlanes));
-            else o.material.clippingPlanes = clipPlanes;
-          }
-        });
         group.add(ro);
       }
 
@@ -344,7 +374,7 @@ export default function Scene3D() {
       // ═══ 传统模式（<20 构件，保留 TransformControls） ═══
       let selectedObj: THREE.Object3D | null = null;
       for (const c of components) {
-        const obj = buildComponentObject(c, { showConcrete, showRebar });
+        const obj = buildComponentObject(c, { showConcrete, showRebar, concreteOpacity });
         if (c.id === selectedId) {
           selectedObj = obj;
           obj.traverse((o: any) => {
@@ -355,13 +385,6 @@ export default function Scene3D() {
             }
           });
         }
-        const clipPlanes = clip.enabled ? [getClipPlane(clip.axis, clip.position)] : [];
-        obj.traverse((o: any) => {
-          if (o.material) {
-            if (Array.isArray(o.material)) o.material.forEach((m: any) => (m.clippingPlanes = clipPlanes));
-            else o.material.clippingPlanes = clipPlanes;
-          }
-        });
         group.add(obj);
       }
 
@@ -417,7 +440,7 @@ export default function Scene3D() {
         }
       }
     }
-  }, [components, showConcrete, showRebar, selectedId, clip, gizmoMode, showCollisions]);
+  }, [components, showConcrete, concreteOpacity, showRebar, selectedId, clip, gizmoMode, showCollisions]);
 
   // 同步 DXF 蓝图底图（地面平面贴图） + 蓝图 TransformControls + 吸附端点
   useEffect(() => {
@@ -599,58 +622,91 @@ function buildDimensionLabels(c: Component): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   const g = c.geometry;
   const p = c.placement;
+  const rot = ((p.rot ?? 0) * Math.PI) / 180;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const px = (p.x || 0) / 1000, py = (p.y || 0) / 1000, pz = (p.z || 0) / 1000;
 
-  const textSprite = (text: string, pos: THREE.Vector3, scale = 0.25) => {
+  const toWorld = (lx: number, ly: number, lz: number) => new THREE.Vector3(
+    px + lx * cos - lz * sin,
+    py + ly,
+    pz + lx * sin + lz * cos
+  );
+
+  const textSprite = (text: string, pos: THREE.Vector3, scale = 0.22) => {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d")!;
     const fontSize = 40;
     ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
-    const w = ctx.measureText(text).width + 20;
+    const w = ctx.measureText(text).width + 24;
     canvas.width = w;
-    canvas.height = fontSize + 20;
+    canvas.height = fontSize + 16;
     ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fillText(text, 10, fontSize + 2);
+    ctx.fillText(text, 12, fontSize + 2);
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set((w / (fontSize + 20)) * scale, scale, 1);
+    sprite.scale.set((w / (fontSize + 16)) * scale, scale, 1);
     sprite.position.copy(pos);
     sprite.renderOrder = 1000;
     return sprite;
   };
 
-  const line = (a: THREE.Vector3, b: THREE.Vector3, color = 0xfacc15) => {
+  const _line = (a: THREE.Vector3, b: THREE.Vector3, color = 0xfacc15) => {
     const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-    const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.8 });
+    const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.85 });
     const l = new THREE.Line(geo, mat);
     l.renderOrder = 999;
     return l;
   };
 
-  const px = (p.x || 0) / 1000;
-  const py = (p.y || 0) / 1000;
-  const pz = (p.z || 0) / 1000;
+  // 通用施工图纸式尺寸标注：a,b 为局部端点，normal 为偏移方向
+  const drawDim = (
+    a: THREE.Vector3, b: THREE.Vector3, label: string,
+    normal: THREE.Vector3, offset: number
+  ) => {
+    const n = normal.clone().normalize();
+    const a1 = a.clone().add(n.clone().multiplyScalar(offset));
+    const b1 = b.clone().add(n.clone().multiplyScalar(offset));
+    out.push(_line(a1, b1));          // 标注线
+    out.push(_line(a, a1));           // 延伸线 1
+    out.push(_line(b, b1));           // 延伸线 2
+    const mid = new THREE.Vector3().addVectors(a1, b1).multiplyScalar(0.5);
+    mid.add(n.clone().multiplyScalar(0.1));
+    out.push(textSprite(label, mid));
+  };
 
-  if (c.type === "BEAM") {
+  // 统一半尺寸（米）
+  let hx = 0, hy = 0, hz = 0;
+  if (c.type === "BEAM" || c.type === "COLUMN" || c.type === "STRIP_FOUND" || c.type === "SHEAR_WALL" || c.type === "STAIR") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const offset = 0.6;
-    out.push(textSprite(`${(g.b ?? 0)}×${(g.h ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px, py + h / 2 + offset, pz)));
-    out.push(line(new THREE.Vector3(px - L / 2, py + h / 2 + offset * 0.6, pz), new THREE.Vector3(px + L / 2, py + h / 2 + offset * 0.6, pz), 0xfacc15));
-  } else if (c.type === "COLUMN") {
-    const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const offset = 0.5;
-    out.push(textSprite(`${(g.b ?? 0)}×${(g.h ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px + b / 2 + offset, py + L / 2, pz)));
-  } else if (c.type === "SLAB") {
+    if (c.type === "BEAM" || c.type === "STRIP_FOUND" || c.type === "STAIR") { hx = L / 2; hy = h / 2; hz = b / 2; }
+    else { hx = b / 2; hy = L / 2; hz = h / 2; }
+  } else if (c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT") {
     const Lx = (g.Lx ?? 0) / 1000, Ly = (g.Ly ?? 0) / 1000, t = (g.t ?? 0) / 1000;
-    const offset = 0.5;
-    out.push(textSprite(`${(g.Lx ?? 0)}×${(g.Ly ?? 0)}×${(g.t ?? 0)}`, new THREE.Vector3(px, py + t / 2 + offset, pz)));
+    hx = Lx / 2; hy = t / 2; hz = Ly / 2;
   } else if (c.type === "PILE") {
     const D = (g.D ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const offset = 0.5;
-    out.push(textSprite(`D${(g.D ?? 0)}×${(g.L ?? 0)}`, new THREE.Vector3(px + D / 2 + offset, py + L / 2, pz)));
+    hx = D / 2; hy = L / 2; hz = D / 2;
   }
+
+  const o = 0.5;
+
+  // X 方向（长度 / Lx）：底面后侧边，向后偏移
+  const xLabel = c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT"
+    ? `${g.Lx}mm` : c.type === "PILE" ? `Φ${g.D}` : `${g.L}mm`;
+  drawDim(toWorld(-hx, -hy, -hz), toWorld(hx, -hy, -hz), xLabel, new THREE.Vector3(0, 0, -1), o);
+
+  // Y 方向（高度 / 厚度 / L）：左前侧边，向左偏移
+  const yLabel = c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT"
+    ? `${g.t}mm` : c.type === "PILE" ? `${g.L}mm` : `${g.h}mm`;
+  drawDim(toWorld(-hx, -hy, hz), toWorld(-hx, hy, hz), yLabel, new THREE.Vector3(-1, 0, 0), o);
+
+  // Z 方向（宽度 / Ly / D）：底面右侧边，向下偏移
+  const zLabel = c.type === "SLAB" || c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT"
+    ? `${g.Ly}mm` : c.type === "PILE" ? `Φ${g.D}` : `${g.b}mm`;
+  drawDim(toWorld(hx, -hy, -hz), toWorld(hx, -hy, hz), zLabel, new THREE.Vector3(0, -1, 0), o);
 
   return out;
 }

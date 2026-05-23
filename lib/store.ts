@@ -51,9 +51,14 @@ interface State {
   showConcrete: boolean;
   showDimensions: boolean;
   showCollisions: boolean;
+  concreteOpacity: number;
+  setConcreteOpacity: (v: number) => void;
   toggleDimensions: () => void;
   toggleCollisions: () => void;
   aiOpen: boolean;
+  selectedRebarId: string | null;
+  selectedRebarComponentId: string | null;
+  setSelectedRebar: (rebarId: string | null, componentId?: string | null) => void;
   leftPanelOpen: boolean;
   bottomPanelOpen: boolean;
   toggleLeftPanel: () => void;
@@ -76,6 +81,8 @@ interface State {
   blueprint: Blueprint | null;
   setBlueprint: (b: Blueprint | null) => void;
   updateBlueprint: (p: Partial<Blueprint>) => void;
+  landingOpen: boolean;
+  setLandingOpen: (v: boolean) => void;
   // === 新增持久化方法 ===
   saveToDB: () => Promise<void>;
   loadFromDB: (id: string) => Promise<boolean>;
@@ -88,7 +95,16 @@ function defaultComponent(type: ComponentType): Component {
   const base = {
     id: uid(type.toLowerCase()),
     type,
-    name: type === "BEAM" ? "KL1" : type === "COLUMN" ? "KZ1" : type === "SLAB" ? "B1" : "ZJ1",
+    name: type === "BEAM" ? "KL1"
+        : type === "COLUMN" ? "KZ1"
+        : type === "SHEAR_WALL" ? "Q1"
+        : type === "SLAB" ? "LB1"
+        : type === "STAIR" ? "AT1"
+        : type === "FOUND" ? "DJ1"
+        : type === "STRIP_FOUND" ? "TJ1"
+        : type === "PILE_CAP" ? "CT1"
+        : type === "PILE" ? "ZJ1"
+        : "FB1",
     concrete: {
       grade: "C30" as const,
       seismic: "THREE" as const,
@@ -102,10 +118,17 @@ function defaultComponent(type: ComponentType): Component {
   };
   let geometry: Component["geometry"];
   switch (type) {
-    case "BEAM": geometry = { b: 300, h: 600, L: 6000 }; break;
-    case "COLUMN": geometry = { b: 500, h: 500, L: 3600 }; break;
-    case "SLAB": geometry = { Lx: 6000, Ly: 4000, t: 120 }; break;
-    case "PILE": geometry = { D: 800, L: 12000 }; break;
+    case "BEAM":        geometry = { b: 300, h: 600, L: 6000 }; break;
+    case "COLUMN":      geometry = { b: 500, h: 500, L: 3600 }; break;
+    case "SHEAR_WALL":  geometry = { b: 200, h: 3000, L: 4000 }; break;
+    case "SLAB":        geometry = { Lx: 6000, Ly: 4000, t: 120 }; break;
+    case "STAIR":       geometry = { b: 1200, h: 150, L: 3000, t: 120 }; break;
+    case "FOUND":       geometry = { Lx: 2400, Ly: 2400, t: 600 }; break;
+    case "STRIP_FOUND": geometry = { b: 900, h: 400, L: 6000 }; break;
+    case "PILE_CAP":    geometry = { Lx: 1800, Ly: 1800, t: 800 }; break;
+    case "PILE":        geometry = { D: 800, L: 12000 }; break;
+    case "RAFT":        geometry = { Lx: 12000, Ly: 8000, t: 500 }; break;
+    default:            geometry = {}; break;
   }
   return autoFillRebar({ ...base, geometry } as Component);
 }
@@ -123,6 +146,8 @@ export const useStore = create<State>((set, get) => ({
   showConcrete: true,
   showDimensions: true,
   showCollisions: true,
+  concreteOpacity: 0.35,
+  setConcreteOpacity: (v) => set({ concreteOpacity: Math.max(0.05, Math.min(1, v)) }),
   toggleDimensions: () => set((s) => ({ showDimensions: !s.showDimensions })),
   toggleCollisions: () => set((s) => ({ showCollisions: !s.showCollisions })),
   aiOpen: false,
@@ -161,6 +186,11 @@ export const useStore = create<State>((set, get) => ({
   toggleRebar: () => set((s) => ({ showRebar: !s.showRebar })),
   toggleConcrete: () => set((s) => ({ showConcrete: !s.showConcrete })),
   setAiOpen: (b) => set({ aiOpen: b }),
+  selectedRebarId: null,
+  selectedRebarComponentId: null,
+  setSelectedRebar: (rebarId, componentId) => set({ selectedRebarId: rebarId ?? null, selectedRebarComponentId: componentId ?? null }),
+  landingOpen: false,
+  setLandingOpen: (v) => set({ landingOpen: v }),
   loadAll: (cs) => {
     set({ components: cs });
     get().revalidate();

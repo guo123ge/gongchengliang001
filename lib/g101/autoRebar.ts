@@ -122,6 +122,58 @@ export function autoFillRebar(c: Component): Component {
         label: "C10@150（支座负筋）",
       });
     }
+  } else if (c.type === "SHEAR_WALL") {
+    // 剪力墙 — 22G101-1 第4章：水平、竖向分布筋 + 拉筋
+    if (!has("HORIZONTAL"))
+      rebars.push({ id: uid("r"), role: "HORIZONTAL", grade: "HRB400", diameter: 10, spacing: 200, label: "C10@200（水平分布筋）" });
+    if (!has("VERTICAL"))
+      rebars.push({ id: uid("r"), role: "VERTICAL", grade: "HRB400", diameter: 10, spacing: 200, label: "C10@200（竖向分布筋）" });
+    if (!has("TIE"))
+      rebars.push({ id: uid("r"), role: "TIE", grade: "HPB300", diameter: 6, spacing: 600, label: "A6@600（拉筋）" });
+
+  } else if (c.type === "STAIR") {
+    // 楼梯 AT型 — 22G101-2：纵向受力筋 + 分布筋
+    if (!has("LONGITUDINAL"))
+      rebars.push({ id: uid("r"), role: "LONGITUDINAL", grade: "HRB400", diameter: 12, spacing: 150, label: "C12@150（纵向受力筋）" });
+    if (!has("DIST"))
+      rebars.push({ id: uid("r"), role: "DIST", grade: "HPB300", diameter: 8, spacing: 250, label: "A8@250（分布筋）" });
+
+  } else if (c.type === "FOUND") {
+    // 独立基础 DJ — 22G101-3：双向底筋
+    if (!has("BOT_X"))
+      rebars.push({ id: uid("r"), role: "BOT_X", grade: "HRB400", diameter: 14, spacing: 150, label: "C14@150（底板X向筋）" });
+    if (!has("BOT_Y"))
+      rebars.push({ id: uid("r"), role: "BOT_Y", grade: "HRB400", diameter: 14, spacing: 150, label: "C14@150（底板Y向筋）" });
+
+  } else if (c.type === "STRIP_FOUND") {
+    // 条形基础 TJ — 22G101-3：横向受力筋 + 纵向构造筋
+    if (!has("TRANSVERSE"))
+      rebars.push({ id: uid("r"), role: "TRANSVERSE", grade: "HRB400", diameter: 12, spacing: 150, label: "C12@150（横向受力筋）" });
+    if (!has("LONGITUDINAL"))
+      rebars.push({ id: uid("r"), role: "LONGITUDINAL", grade: "HRB400", diameter: 12, count: 3, label: "3C12（纵向构造筋）" });
+
+  } else if (c.type === "PILE_CAP") {
+    // 桩基承台 CT — 22G101-3：双向底筋
+    if (!has("BOT_X"))
+      rebars.push({ id: uid("r"), role: "BOT_X", grade: "HRB400", diameter: 16, spacing: 150, label: "C16@150（X向底筋）" });
+    if (!has("BOT_Y"))
+      rebars.push({ id: uid("r"), role: "BOT_Y", grade: "HRB400", diameter: 16, spacing: 150, label: "C16@150（Y向底筋）" });
+    if (!has("TIE"))
+      rebars.push({ id: uid("r"), role: "TIE", grade: "HRB400", diameter: 10, spacing: 200, label: "C10@200（拉筋）" });
+
+  } else if (c.type === "RAFT") {
+    // 筏板基础 FB — 22G101-3：双向上下钢筋网
+    if (!has("BOT_X"))
+      rebars.push({ id: uid("r"), role: "BOT_X", grade: "HRB400", diameter: 16, spacing: 150, label: "C16@150（底板X向筋）" });
+    if (!has("BOT_Y"))
+      rebars.push({ id: uid("r"), role: "BOT_Y", grade: "HRB400", diameter: 16, spacing: 150, label: "C16@150（底板Y向筋）" });
+    if (!has("TOP_X"))
+      rebars.push({ id: uid("r"), role: "TOP_X", grade: "HRB400", diameter: 14, spacing: 200, label: "C14@200（顶板X向筋）" });
+    if (!has("TOP_Y"))
+      rebars.push({ id: uid("r"), role: "TOP_Y", grade: "HRB400", diameter: 14, spacing: 200, label: "C14@200（顶板Y向筋）" });
+    if (!has("TIE"))
+      rebars.push({ id: uid("r"), role: "TIE", grade: "HPB300", diameter: 10, spacing: 600, label: "A10@600（拉筋）" });
+
   } else if (c.type === "PILE") {
     const D = g.D ?? 800;
     const L = g.L ?? 12000;

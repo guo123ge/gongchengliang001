@@ -1,6 +1,13 @@
 // InstancedMesh 构建 — 同类型构件合并为 InstancedMesh，大幅减少 WebGL draw calls
 import * as THREE from "three";
 import type { Component, Rebar } from "../types";
+import {
+  rebarMeshMat, tubeRadius, cylMesh,
+  beamStirrupMesh, colStirrupMesh, spiralTubeMesh,
+  REBAR_GRADE_COLOR, STIRRUP_NORM_COLOR, STIRRUP_DENSE_COLOR,
+  stirrupDiam,
+} from "./rebarHelper";
+import { beamColumnStirrupXs } from "./geometry";
 
 // ─── 类型签名 ───
 
@@ -25,7 +32,7 @@ export interface InstancedBuildResult {
 export function buildInstancedScene(
   components: Component[],
   selectedId: string | null,
-  opts: { showConcrete: boolean; showRebar: boolean },
+  opts: { showConcrete: boolean; showRebar: boolean; concreteOpacity?: number },
 ): InstancedBuildResult {
   const concreteInstances: THREE.InstancedMesh[] = [];
   const rebarObjects: THREE.Object3D[] = [];
@@ -54,9 +61,11 @@ export function buildInstancedScene(
       const mat = new THREE.MeshStandardMaterial({
         color: 0xcbd5e1,
         transparent: true,
-        opacity: 0.45,
+        opacity: opts.concreteOpacity ?? 0.35,
         metalness: 0.05,
         roughness: 0.9,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       });
 
       const im = new THREE.InstancedMesh(baseGeo, mat, list.length);
@@ -88,14 +97,12 @@ export function buildInstancedScene(
     }
   }
 
-  // ─── 钢筋 Line (原有逻辑，保持独立) ───
+    // ─── 钢筋管（3D tube 渲染） ───
   if (opts.showRebar) {
     for (const c of components) {
       for (const r of c.rebars) {
-        const lines = buildRebarLines(c, r);
-        for (const line of lines) {
-          rebarObjects.push(line);
-        }
+        const tubes = buildRebarTubes(c, r);
+        for (const t of tubes) rebarObjects.push(t);
       }
     }
   }
@@ -161,86 +168,72 @@ export function getComponentIdFromHit(
   return null;
 }
 
-// ─── 钢筋线条渲染（与 geometry.ts 一致，但独立为函数） ───
+// ─── 3D 钢筋管渲染 ─────────────────────────────────────────────────────────────
 
-const GRADE_COLOR: Record<string, number> = {
-  HPB300: 0x16a34a,
-  HRB400: 0x2563eb,
-  HRB500: 0xdc2626,
-};
-const STIRRUP_COLOR = 0xea580c;
-
-function rebarMaterial(r: Rebar): THREE.LineBasicMaterial {
-  const color = r.role === "STIRRUP" || r.role === "SPIRAL" ? STIRRUP_COLOR : GRADE_COLOR[r.grade] ?? 0x2563eb;
-  return new THREE.LineBasicMaterial({ color });
-}
-
-function buildRebarLines(c: Component, r: Rebar): THREE.Line[] {
+function buildRebarTubes(c: Component, r: Rebar): THREE.Mesh[] {
   const g = c.geometry;
   const cover = c.concrete.cover / 1000;
-  const mat = rebarMaterial(r);
-  const out: THREE.Line[] = [];
+  const tR = tubeRadius(r);
+  const isStirrup = r.role === "STIRRUP" || r.role === "SPIRAL";
+  const color = isStirrup ? STIRRUP_NORM_COLOR : (REBAR_GRADE_COLOR[r.grade] ?? 0x154fa0);
+  const mat = rebarMeshMat(color);
+  const out: THREE.Mesh[] = [];
 
   if (c.type === "BEAM") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const ix = b / 2 - cover, iy = h / 2 - cover, ax = L / 2;
-    if (r.role === "TOP" || r.role === "BOTTOM" || r.role === "LONGITUDINAL" || r.role === "ERECTION" || r.role === "BENT" || r.role === "TIE" || r.role === "ADDITIONAL") {
-      const y = r.role === "TOP" || r.role === "ERECTION" ? iy : -iy;
+    const ax = L / 2;
+    const sd = stirrupDiam(c.rebars) / 1000;
+    const md = r.diameter / 1000;
+    const sx = b / 2 - cover - sd / 2;
+    const sy = h / 2 - cover - sd / 2;
+    const ix = b / 2 - cover - sd - md / 2;
+    const iy = h / 2 - cover - sd - md / 2;
+    const LONG = ["TOP","BOTTOM","LONGITUDINAL","ERECTION","BENT","TIE","ADDITIONAL"];
+    if (LONG.includes(r.role)) {
+      const y = (r.role === "TOP" || r.role === "ERECTION") ? iy : -iy;
       const n = Math.max(2, r.count ?? 2);
       for (let i = 0; i < n; i++) {
-        const z = -ix + (n > 1 ? (2 * ix * i) / (n - 1) : 0);
-        const pts = [new THREE.Vector3(-ax, y, z), new THREE.Vector3(ax, y, z)];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        const z = n > 1 ? -ix + (2 * ix * i) / (n - 1) : 0;
+        out.push(cylMesh(new THREE.Vector3(-ax, y, z), new THREE.Vector3(ax, y, z), tR, mat));
       }
     } else if (r.role === "STIRRUP") {
-      const denseMat = new THREE.LineBasicMaterial({ color: 0xdc2626 });
-      const normMat = new THREE.LineBasicMaterial({ color: 0xea580c });
-      const pos = Math.floor(L * 1000 / (r.spacing ?? 200));
-      for (let i = 0; i <= pos; i++) {
-        const x = -ax + (L * i) / pos;
-        const isDense = r.densifyLength != null && r.densifyLength > 0 &&
-          ((i * (r.spacing ?? 200) < r.densifyLength) || ((pos - i) * (r.spacing ?? 200) < r.densifyLength));
-        const pts = [
-          new THREE.Vector3(x, iy, -ix), new THREE.Vector3(x, iy, ix),
-          new THREE.Vector3(x, -iy, ix), new THREE.Vector3(x, -iy, -ix),
-          new THREE.Vector3(x, iy, -ix),
-        ];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), isDense ? denseMat : normMat));
+      const xs = beamColumnStirrupXs(L, r, true);
+      for (const { x: pos, dense } of xs) {
+        const x = -ax + pos / 1000;
+        out.push(beamStirrupMesh(x, sx, sy, tR,
+          rebarMeshMat(dense ? STIRRUP_DENSE_COLOR : STIRRUP_NORM_COLOR)));
       }
     }
   } else if (c.type === "COLUMN") {
     const b = (g.b ?? 0) / 1000, h = (g.h ?? 0) / 1000, L = (g.L ?? 0) / 1000;
-    const ix = b / 2 - cover, iz = h / 2 - cover, ay = L / 2;
+    const ay = L / 2;
+    const sd = stirrupDiam(c.rebars) / 1000;
+    const md = r.diameter / 1000;
+    const sx = b / 2 - cover - sd / 2;
+    const sz = h / 2 - cover - sd / 2;
+    const ix = b / 2 - cover - sd - md / 2;
+    const iz = h / 2 - cover - sd - md / 2;
     if (r.role === "MAIN" || r.role === "CONSTRUCT_COL" || r.role === "TIE") {
       const n = Math.max(4, r.count ?? 4);
-      const positions: [number, number][] = [];
       const perSide = Math.ceil(n / 4);
+      const positions: [number, number][] = [];
       for (let i = 0; i < perSide; i++) {
         const t = perSide > 1 ? i / (perSide - 1) : 0.5;
-        positions.push([-ix + 2 * ix * t, iz]);
+        positions.push([-ix + 2 * ix * t,  iz]);
         positions.push([-ix + 2 * ix * t, -iz]);
-        positions.push([ix, -iz + 2 * iz * t]);
+        positions.push([ ix, -iz + 2 * iz * t]);
         positions.push([-ix, -iz + 2 * iz * t]);
       }
       const uniq = Array.from(new Set(positions.map((p) => p.join(",")))).slice(0, n).map((s) => s.split(",").map(Number));
       for (const [x, z] of uniq) {
-        const pts = [new THREE.Vector3(x, -ay, z), new THREE.Vector3(x, ay, z)];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        out.push(cylMesh(new THREE.Vector3(x, -ay, z), new THREE.Vector3(x, ay, z), tR, mat));
       }
     } else if (r.role === "STIRRUP") {
-      const denseMat = new THREE.LineBasicMaterial({ color: 0xdc2626 });
-      const normMat = new THREE.LineBasicMaterial({ color: 0xea580c });
-      const pos = Math.floor(L * 1000 / (r.spacing ?? 200));
-      for (let i = 0; i <= pos; i++) {
-        const y = -ay + (L * i) / pos;
-        const isDense = r.densifyLength != null && r.densifyLength > 0 &&
-          ((i * (r.spacing ?? 200) < r.densifyLength) || ((pos - i) * (r.spacing ?? 200) < r.densifyLength));
-        const pts = [
-          new THREE.Vector3(-ix, y, -iz), new THREE.Vector3(ix, y, -iz),
-          new THREE.Vector3(ix, y, iz), new THREE.Vector3(-ix, y, iz),
-          new THREE.Vector3(-ix, y, -iz),
-        ];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), isDense ? denseMat : normMat));
+      const ys = beamColumnStirrupXs(L, r, true);
+      for (const { x: pos, dense } of ys) {
+        const y = -ay + pos / 1000;
+        out.push(colStirrupMesh(y, sx, sz, tR,
+          rebarMeshMat(dense ? STIRRUP_DENSE_COLOR : STIRRUP_NORM_COLOR)));
       }
     }
   } else if (c.type === "SLAB") {
@@ -250,8 +243,7 @@ function buildRebarLines(c: Component, r: Rebar): THREE.Line[] {
       const n = Math.max(2, Math.floor((Ly * 1000) / r.spacing) + 1);
       for (let i = 0; i < n; i++) {
         const z = -Ly / 2 + (n > 1 ? (Ly * i) / (n - 1) : 0);
-        const pts = [new THREE.Vector3(-Lx / 2, y, z), new THREE.Vector3(Lx / 2, y, z)];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        out.push(cylMesh(new THREE.Vector3(-Lx / 2, y, z), new THREE.Vector3(Lx / 2, y, z), tR, mat));
       }
     }
   } else if (c.type === "PILE") {
@@ -259,11 +251,11 @@ function buildRebarLines(c: Component, r: Rebar): THREE.Line[] {
     const rad = D / 2 - cover;
     if (r.role === "MAIN" || r.role === "SONIC") {
       const n = Math.max(4, r.count ?? 6);
+      const sMat = r.role === "SONIC" ? rebarMeshMat(0xca8a04) : mat;
       for (let i = 0; i < n; i++) {
         const theta = (2 * Math.PI * i) / n;
         const x = rad * Math.cos(theta), z = rad * Math.sin(theta);
-        const pts = [new THREE.Vector3(x, -L / 2, z), new THREE.Vector3(x, L / 2, z)];
-        out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        out.push(cylMesh(new THREE.Vector3(x, -L / 2, z), new THREE.Vector3(x, L / 2, z), tR, sMat));
       }
     } else if (r.role === "SPIRAL" || r.role === "STIFFEN" || r.role === "STIRRUP") {
       const sp = (r.spacing ?? 200) / 1000;
@@ -275,7 +267,7 @@ function buildRebarLines(c: Component, r: Rebar): THREE.Line[] {
         const ang = t * turns * Math.PI * 2;
         pts.push(new THREE.Vector3(rad * Math.cos(ang), -L / 2 + t * L, rad * Math.sin(ang)));
       }
-      out.push(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+      out.push(spiralTubeMesh(pts, tR, rebarMeshMat(STIRRUP_NORM_COLOR)));
     }
   }
 

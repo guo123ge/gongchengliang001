@@ -1,6 +1,6 @@
 "use client";
-import { useMemo, useRef } from "react";
-import { Download, Scissors } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, Scissors, ZoomIn, ZoomOut, Maximize2, RotateCcw, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import type { Component, Rebar } from "@/lib/types";
 import saveAs from "file-saver";
@@ -13,9 +13,33 @@ export default function SectionView() {
   const setClip = useStore((s) => s.setClip);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
   const c = useMemo(() => components.find((x) => x.id === selectedId), [components, selectedId]);
 
   const { viewBox, elements, caption } = useMemo(() => buildSection(c, clip.axis), [c, clip.axis]);
+
+  const clampZoom = (z: number) => Math.min(8, Math.max(0.25, z));
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoom((z) => clampZoom(z * (e.deltaY < 0 ? 1.12 : 0.9)));
+  }, []);
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxOpen(false);
+      if (e.key === "+" || e.key === "=") setZoom((z) => clampZoom(z * 1.2));
+      if (e.key === "-") setZoom((z) => clampZoom(z / 1.2));
+      if (e.key === "0") setZoom(1);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightboxOpen]);
+
+  const openLightbox = () => { if (!c) return; setZoom(1); setLightboxOpen(true); };
 
   const exportPng = async () => {
     if (!svgRef.current) return;
@@ -56,18 +80,85 @@ export default function SectionView() {
           <Download className="w-3.5 h-3.5" />导出 PNG
         </button>
       </div>
-      <div className="panel flex items-center justify-center bg-white text-slate-800" style={{ minHeight: 280 }}>
+      {/* 预览面板 — 点击放大 */}
+      <div
+        className={`panel flex items-center justify-center bg-white text-slate-800 relative group ${c ? "cursor-zoom-in" : ""}`}
+        style={{ minHeight: 280 }}
+        onClick={openLightbox}
+        title={c ? "点击放大查看" : undefined}
+      >
         {!c ? (
           <div className="text-slate-400 text-xs p-6">请选择一个构件以生成剖面图</div>
         ) : (
-          <svg ref={svgRef} viewBox={viewBox} width="100%" style={{ maxHeight: 380 }}>
-            <Scissors className="hidden" />
-            <rect x={0} y={0} width={1000} height={600} fill="#fff" />
-            {elements}
-          </svg>
+          <>
+            <svg ref={svgRef} viewBox={viewBox} width="100%" style={{ maxHeight: 380 }}>
+              <Scissors className="hidden" />
+              <rect x={0} y={0} width={1000} height={600} fill="#fff" />
+              {elements}
+            </svg>
+            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <div className="bg-black/50 text-white rounded p-1">
+                <Maximize2 className="w-4 h-4" />
+              </div>
+            </div>
+          </>
         )}
       </div>
       {c && <div className="text-xs text-eng-muted">{caption}</div>}
+
+      {/* 灯箱放大视图 */}
+      {lightboxOpen && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/85 flex flex-col"
+          onClick={() => setLightboxOpen(false)}
+        >
+          {/* 工具栏 */}
+          <div
+            className="h-12 shrink-0 flex items-center justify-center gap-3 bg-black/60 border-b border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="p-1.5 rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              onClick={() => setZoom((z) => clampZoom(z / 1.2))}
+              title="缩小 (−)"
+            ><ZoomOut className="w-4 h-4" /></button>
+            <span className="text-white/70 text-sm w-14 text-center font-mono">{Math.round(zoom * 100)}%</span>
+            <button
+              className="p-1.5 rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              onClick={() => setZoom((z) => clampZoom(z * 1.2))}
+              title="放大 (+)"
+            ><ZoomIn className="w-4 h-4" /></button>
+            <button
+              className="p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              onClick={() => setZoom(1)}
+              title="重置 (0)"
+            ><RotateCcw className="w-3.5 h-3.5" /></button>
+            <div className="w-px h-5 bg-white/20 mx-1" />
+            <button
+              className="p-1.5 rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              onClick={() => setLightboxOpen(false)}
+              title="关闭 (Esc)"
+            ><X className="w-4 h-4" /></button>
+          </div>
+
+          {/* SVG 滚动区 */}
+          <div
+            className="flex-1 overflow-auto flex items-start justify-center p-6"
+            onClick={(e) => e.stopPropagation()}
+            onWheel={handleWheel}
+          >
+            <svg
+              viewBox={viewBox}
+              width={1200 * zoom}
+              height={700 * zoom}
+              style={{ background: "#ffffff", display: "block", flexShrink: 0 }}
+            >
+              <rect x={0} y={0} width={1000} height={600} fill="#fff" />
+              {elements}
+            </svg>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -82,14 +173,20 @@ function buildSection(c: Component | undefined, axis: "x" | "y" | "z") {
   const margin = 130;
 
   let sw = 0, sh = 0, label = "";
-  if (c.type === "BEAM") { sw = g.b ?? 300; sh = g.h ?? 600; label = `${c.name} 梁截面 ${sw}×${sh}`; }
+  if (c.type === "BEAM")        { sw = g.b ?? 300; sh = g.h ?? 600; label = `${c.name} 梁截面 ${sw}×${sh}`; }
   else if (c.type === "COLUMN") { sw = g.b ?? 500; sh = g.h ?? 500; label = `${c.name} 柱截面 ${sw}×${sh}`; }
-  else if (c.type === "SLAB") { sw = g.Lx ?? 6000; sh = g.t ?? 120; label = `${c.name} 板剖面 ${sw}×${sh}`; }
-  else if (c.type === "PILE") { sw = g.D ?? 800; sh = g.D ?? 800; label = `${c.name} 桩截面 D${sw}`; }
+  else if (c.type === "SLAB")   { sw = g.Lx ?? 6000; sh = g.t ?? 120; label = `${c.name} 板剖面 ${sw}×${sh}`; }
+  else if (c.type === "PILE")   { sw = g.D ?? 800; sh = g.D ?? 800; label = `${c.name} 桩截面 D${sw}`; }
+  else if (c.type === "SHEAR_WALL")  { sw = g.b ?? 200; sh = g.h ?? 3000; label = `${c.name} 剪力墙截面 ${sw}×${sh}`; }
+  else if (c.type === "STAIR")       { sw = g.b ?? 1200; sh = g.t ?? 120; label = `${c.name} 楼梯板截面 ${sw}×${sh}`; }
+  else if (c.type === "FOUND")       { sw = g.Lx ?? 2400; sh = g.Ly ?? 2400; label = `${c.name} 独基平面 ${sw}×${sh} h=${g.t ?? 600}`; }
+  else if (c.type === "STRIP_FOUND") { sw = g.b ?? 900; sh = g.h ?? 400; label = `${c.name} 条基截面 ${sw}×${sh}`; }
+  else if (c.type === "PILE_CAP")    { sw = g.Lx ?? 1800; sh = g.Ly ?? 1800; label = `${c.name} 承台平面 ${sw}×${sh} h=${g.t ?? 800}`; }
+  else if (c.type === "RAFT")        { sw = g.Lx ?? 12000; sh = g.t ?? 500; label = `${c.name} 筏板截面 ${sw}×${sh}`; }
 
-  // 板太扁时，竖直方向单独放大
+  // 太扁时竖直方向单独放大
   let scale = Math.min((W - 2 * margin) / sw, (H - 2 * margin) / sh);
-  if (c.type === "SLAB" && sw / sh > 15) {
+  if ((c.type === "SLAB" || c.type === "STAIR" || c.type === "RAFT") && sw / sh > 15) {
     const sy = (H * 0.35) / sh;
     scale = Math.max(scale, sy);
   }
@@ -138,10 +235,14 @@ function buildSection(c: Component | undefined, axis: "x" | "y" | "z") {
     drawBeam(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
   } else if (c.type === "COLUMN") {
     drawColumn(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
-  } else if (c.type === "SLAB") {
+  } else if (c.type === "SLAB" || c.type === "STAIR" || c.type === "RAFT") {
     drawSlab(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
   } else if (c.type === "PILE") {
     drawPile(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
+  } else if (c.type === "SHEAR_WALL" || c.type === "STRIP_FOUND") {
+    drawWallOrStrip(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
+  } else if (c.type === "FOUND" || c.type === "PILE_CAP") {
+    drawFoundation(elems, rebars, sw, sh, cover, scale, x0, y0, cx, cy, toSvg, plotBar, bColor, plotText);
   }
 
   // ───────── 尺寸标注 ─────────
@@ -493,6 +594,22 @@ function drawRebarSpecs(
       } else if (r.role === "SONIC") {
         addSpec("SONIC", label || `${count}Φ${dia} 声测管`, sw / 2, sh * 0.35, "middle");
       }
+    } else if (c.type === "SHEAR_WALL" || c.type === "STRIP_FOUND") {
+      if (["HORIZONTAL", "TRANSVERSE"].includes(r.role)) {
+        addSpec(r.role, label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2, "middle");
+      } else if (["VERTICAL", "LONGITUDINAL"].includes(r.role)) {
+        addSpec(r.role, label || `${r.count ? r.count + grade + "-" + dia : grade + "-" + dia + "@" + spacing}`, sw - cover / 2, cover / 2, "end");
+      } else if (r.role === "TIE") {
+        addSpec("TIE", label || `${grade}-${dia}@${spacing}`, cover / 2, sh / 2, "start");
+      }
+    } else if (c.type === "FOUND" || c.type === "PILE_CAP" || c.type === "RAFT") {
+      if (["BOT_X", "TOP_X"].includes(r.role)) {
+        addSpec(r.role, label || `${grade}-${dia}@${spacing}`, sw / 2, sh - cover / 2, "middle");
+      } else if (["BOT_Y", "TOP_Y"].includes(r.role)) {
+        addSpec(r.role, label || `${grade}-${dia}@${spacing}`, cover / 2, sh / 2, "start");
+      } else if (r.role === "TIE") {
+        addSpec("TIE", label || `${grade}-${dia}@${spacing}`, sw / 2, sh / 2, "middle");
+      }
     }
   });
 
@@ -513,11 +630,77 @@ function drawRebarSpecs(
   });
 }
 
+// ======== 剪力墙 / 条基截面 ========
+function drawWallOrStrip(
+  elems: React.ReactNode[], rebars: Rebar[], sw: number, sh: number, cover: number,
+  scale: number, x0: number, y0: number, _cx: number, _cy: number,
+  _toSvg: any, plotBar: any, bColor: any, _plotText: any,
+) {
+  const nBotRow = 3;
+  rebars.forEach((r) => {
+    const color = bColor(r);
+    const d = r.diameter;
+    if (["HORIZONTAL", "TRANSVERSE"].includes(r.role)) {
+      const rows = r.spacing ? Math.max(2, Math.floor(sh / r.spacing) + 1) : nBotRow;
+      for (let i = 0; i < rows; i++) {
+        const ym = cover + (rows > 1 ? ((sh - 2 * cover) * i) / (rows - 1) : 0);
+        plotBar(cover, ym, d, color, `r-${r.id}-l-${i}`);
+        plotBar(sw - cover, ym, d, color, `r-${r.id}-r-${i}`);
+      }
+    } else if (["VERTICAL", "LONGITUDINAL"].includes(r.role)) {
+      const cols = r.count ?? (r.spacing ? Math.max(2, Math.floor(sw / r.spacing) + 1) : 3);
+      for (let i = 0; i < cols; i++) {
+        const xm = cover + (cols > 1 ? ((sw - 2 * cover) * i) / (cols - 1) : 0);
+        plotBar(xm, cover, d, color, `r-${r.id}-t-${i}`);
+        plotBar(xm, sh - cover, d, color, `r-${r.id}-b-${i}`);
+      }
+    } else if (r.role === "TIE") {
+      const nx = 3, ny = 3;
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < ny; j++) {
+          const xm = cover + ((sw - 2 * cover) * i) / (nx - 1);
+          const ym = cover + ((sh - 2 * cover) * j) / (ny - 1);
+          plotBar(xm, ym, d * 0.7, color, `tie-${r.id}-${i}-${j}`);
+        }
+      }
+    }
+  });
+}
+
+// ======== 独基 / 承台平面 ========
+function drawFoundation(
+  elems: React.ReactNode[], rebars: Rebar[], sw: number, sh: number, cover: number,
+  scale: number, x0: number, y0: number, _cx: number, _cy: number,
+  _toSvg: any, plotBar: any, bColor: any, _plotText: any,
+) {
+  rebars.forEach((r) => {
+    const color = bColor(r);
+    const d = r.diameter;
+    if (r.role === "BOT_X" || r.role === "TOP_X") {
+      const n = r.spacing ? Math.max(2, Math.floor(sh / r.spacing) + 1) : 4;
+      const ym = r.role === "BOT_X" ? sh - cover : cover;
+      for (let i = 0; i < n; i++) {
+        const xm = cover + (n > 1 ? ((sw - 2 * cover) * i) / (n - 1) : 0);
+        plotBar(xm, ym, d, color, `r-${r.id}-${i}`);
+      }
+    } else if (r.role === "BOT_Y" || r.role === "TOP_Y") {
+      const n = r.spacing ? Math.max(2, Math.floor(sw / r.spacing) + 1) : 4;
+      const xm = r.role === "BOT_Y" ? cover : sw - cover;
+      for (let i = 0; i < n; i++) {
+        const ym = cover + (n > 1 ? ((sh - 2 * cover) * i) / (n - 1) : 0);
+        plotBar(xm, ym, d, color, `r-${r.id}-${i}`);
+      }
+    }
+  });
+}
+
 function roleName(r: string) {
   return ({
     TOP: "面筋", BOTTOM: "底筋", SIDE: "腰筋", STIRRUP: "箍筋", MAIN: "纵筋", DIST: "分布筋",
     SPIRAL: "螺旋箍", NEG: "支座负筋", LONGITUDINAL: "纵筋", ERECTION: "架立筋", BENT: "弯起筋",
     TIE: "拉筋", ADDITIONAL: "附加筋", CONSTRUCT: "构造筋", STOOL: "马凳筋",
     CONSTRUCT_COL: "构造纵筋", STIFFEN: "加劲箍", SONIC: "声测管",
+    HORIZONTAL: "水平分布筋", VERTICAL: "竖向分布筋", TRANSVERSE: "横向受力筋",
+    BOT_X: "底板X筋", BOT_Y: "底板Y筋", TOP_X: "顶板X筋", TOP_Y: "顶板Y筋",
   } as any)[r] ?? r;
 }

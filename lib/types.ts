@@ -1,6 +1,16 @@
 // 核心类型定义
 
-export type ComponentType = "BEAM" | "SLAB" | "COLUMN" | "PILE";
+export type ComponentType =
+  | "BEAM"        // 框架梁 KL
+  | "COLUMN"      // 框架柱 KZ
+  | "SHEAR_WALL"  // 剪力墙 Q
+  | "SLAB"        // 楼板 LB
+  | "STAIR"       // 楼梯 LT
+  | "FOUND"       // 独立基础 DJ
+  | "STRIP_FOUND" // 条形基础 TJ
+  | "PILE_CAP"    // 桩基承台 CT
+  | "PILE"        // 灌注桩 ZJ
+  | "RAFT";       // 筏板基础 FB
 
 export type RebarGrade = "HPB300" | "HRB400" | "HRB500";
 export type ConcreteGrade =
@@ -14,7 +24,9 @@ export interface Rebar {
   role: "TOP" | "BOTTOM" | "SIDE" | "STIRRUP" | "MAIN" | "DIST" | "SPIRAL" | "NEG" |
         "LONGITUDINAL" | "ERECTION" | "BENT" | "TIE" | "ADDITIONAL" |
         "CONSTRUCT" | "STOOL" |
-        "CONSTRUCT_COL" | "STIFFEN" | "SONIC";
+        "CONSTRUCT_COL" | "STIFFEN" | "SONIC" |
+        "HORIZONTAL" | "VERTICAL" | "TRANSVERSE" |  // 墙/基础横纵筋
+        "BOT_X" | "BOT_Y" | "TOP_X" | "TOP_Y";    // 基础/筏板双向筋
   grade: RebarGrade;
   diameter: number;   // mm
   count?: number;     // 根数（纵筋）
@@ -41,6 +53,9 @@ export interface Geometry {
   Ly?: number;
   t?: number;
   D?: number;
+  /** 框架梁端支座处柱截面宽度 mm（用于锚固类型判断）。
+   *  直锚条件：hc - cover ≥ laE；否则按弯锚计算。默认 500。*/
+  hc?: number;
 }
 
 /** 混凝土参数 */

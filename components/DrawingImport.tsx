@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Upload, Layers, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { X, Upload, Layers, Send, ChevronLeft, ChevronRight, Sparkles, AlertTriangle } from "lucide-react";
 import { parseDxf, renderDxfToSvg, rasterizeSvg, type DxfParseResult } from "@/lib/dxf/parser";
 import { useStore } from "@/lib/store";
 import { renderPdfPageToImage, getPdfPageCount, type PdfRenderResult } from "@/lib/pdf/renderer";
@@ -18,6 +18,13 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
   const [err, setErr] = useState("");
   const [fileRef, setFileRef] = useState<File | null>(null);
   const setBlueprint = useStore((s) => s.setBlueprint);
+  const addComponentFromAI = (c: any) => {
+    useStore.setState((s) => ({ components: [...s.components, c] }));
+    useStore.getState().revalidate();
+  };
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognizeMsg, setRecognizeMsg] = useState("");
+  const [recognizePhase, setRecognizePhase] = useState<"idle"|"sending"|"recognizing"|"done"|"error">("idle");
 
   // PDF 专用状态
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -72,6 +79,7 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       setMode("image");
       setUrl(URL.createObjectURL(f));
       setFileRef(f);
+      autoFlow(f, "image");
     } else if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
       setMode("pdf");
       setUrl(URL.createObjectURL(f));
@@ -80,7 +88,7 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       try {
         const count = await getPdfPageCount(f);
         setPdfPageCount(count);
-        await renderPdfPage(0, f, pdfQuality);
+        await renderPdfPage(0, f, pdfQuality, true);
       } catch (e: any) {
         setErr(`PDF 解析失败：${e?.message ?? e}`);
       } finally { setBusy(false); }
@@ -92,7 +100,7 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
 
   // ─── PDF 翻页 ───
 
-  const renderPdfPage = async (idx: number, file?: File, quality?: number) => {
+  const renderPdfPage = async (idx: number, file?: File, quality?: number, triggerAutoFlow = false) => {
     const f = file ?? fileRef;
     const q = quality ?? pdfQuality;
     if (!f) return;
@@ -103,6 +111,7 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       setPdfRenderResult(result);
       if (url) URL.revokeObjectURL(url);
       setUrl(result.dataUrl);
+      if (triggerAutoFlow) autoFlow(f, "pdf", result);
     } catch (e: any) {
       setErr(`PDF 第 ${idx + 1} 页渲染失败：${e?.message ?? e}`);
     } finally { setBusy(false); }
@@ -123,6 +132,102 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       if (next.has(n)) next.delete(n); else next.add(n);
       return next;
     });
+  };
+
+  // ─── 核心自动流程：发送底图 + AI 识别 ───
+
+  const autoFlow = useCallback(async (
+    file: File,
+    m: "image" | "pdf",
+    pdfResult?: PdfRenderResult | null,
+  ) => {
+    setErr("");
+    setRecognizing(true);
+
+    // Step 1: 发送底图到 3D 场景
+    setRecognizePhase("sending");
+    setRecognizeMsg("正在发送底图到 3D 场景...");
+    let dataUrl: string;
+    try {
+      if (m === "image") {
+        dataUrl = await fileToDataUrl(file);
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise<void>((res) => { img.onload = () => res(); });
+        setBlueprint({
+          imageUrl: dataUrl, widthMm: img.width, heightMm: img.height,
+          offsetX: 0, offsetZ: 0, rotation: 0, scale: 1, visible: true,
+          bbox: { minX: 0, minY: 0, maxX: img.width, maxY: img.height },
+          endpoints: [], layers: [], activeLayers: [],
+          snapEnabled: false, locked: false,
+        });
+      } else if (pdfResult) {
+        dataUrl = pdfResult.dataUrl;
+        setBlueprint({
+          imageUrl: dataUrl, widthMm: pdfResult.widthMm, heightMm: pdfResult.heightMm,
+          offsetX: 0, offsetZ: 0, rotation: 0, scale: 1, visible: true,
+          bbox: { minX: 0, minY: 0, maxX: pdfResult.widthMm, maxY: pdfResult.heightMm },
+          endpoints: [], layers: [], activeLayers: [],
+          snapEnabled: false, locked: false,
+        });
+      } else {
+        setRecognizing(false);
+        return;
+      }
+    } catch (e: any) {
+      setErr(`底图发送失败：${e?.message ?? e}`);
+      setRecognizePhase("error");
+      setRecognizing(false);
+      return;
+    }
+
+    // Step 2: AI 识别构件
+    setRecognizePhase("recognizing");
+    setRecognizeMsg("底图已加载，正在 AI 识别构件...");
+    try {
+      const cfg = (await import("./SettingsDialog")).loadAIConfig();
+      if (!cfg.apiKey || !cfg.baseUrl || !cfg.model) {
+        setRecognizePhase("idle");
+        setRecognizeMsg("底图已加载到 3D 场景。如需 AI 识别，请先在设置中配置 API Key，然后点击「AI 识别构件」。");
+        return;
+      }
+      const r = await fetch("/api/ai/recognize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: dataUrl, baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model }),
+      });
+      const result = await r.json();
+      if (!r.ok || result.error) {
+        setRecognizePhase("error");
+        setRecognizeMsg(`底图已加载。AI 识别失败：${result.error}`);
+        return;
+      }
+      const comps: any[] = result.components ?? [];
+      if (comps.length === 0) {
+        setRecognizePhase("done");
+        setRecognizeMsg("底图已加载。AI 未识别到构件，可尝试更换模型或手动添加。");
+        return;
+      }
+      comps.forEach(addComponentFromAI);
+      setRecognizePhase("done");
+      setRecognizeMsg(`✓ 已自动识别并添加 ${comps.length} 个构件${result.notes ? "，AI提示: " + result.notes : ""}`);
+    } catch (e: any) {
+      setRecognizePhase("error");
+      setRecognizeMsg(`底图已加载。AI 识别出错：${e?.message}`);
+    } finally {
+      setRecognizing(false);
+    }
+  }, [addComponentFromAI, setBlueprint]);
+
+  // ─── 手动重试 ───
+
+  const recognizeWithAI = async () => {
+    if (!fileRef) return;
+    if (mode === "image") {
+      await autoFlow(fileRef, "image");
+    } else if (mode === "pdf" && pdfRenderResult) {
+      await autoFlow(fileRef, "pdf", pdfRenderResult);
+    }
   };
 
   // ─── 发送到 3D 场景 ───
@@ -211,11 +316,26 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
     (mode === "image" && fileRef) ||
     (mode === "pdf" && pdfRenderResult !== null);
 
+  // ─── Escape key to close ───
+  const handleKey = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+  }, [onClose]);
+  useEffect(() => {
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [handleKey]);
+
   // ─── UI ───
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="panel w-[960px] h-[680px] p-4 shadow-xl flex flex-col">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        className="panel w-[960px] h-[680px] p-4 shadow-xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex justify-between items-center mb-3">
           <div className="font-medium">图纸导入（DXF / PDF / PNG / JPG）</div>
@@ -263,6 +383,19 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
 
           <div className="flex-1" />
 
+          {/* AI 重新识别按钮 */}
+          {(mode === "image" || mode === "pdf") && url && (
+            <button
+              className={recognizing ? "btn-secondary opacity-70 cursor-not-allowed" : "btn-secondary"}
+              onClick={recognizeWithAI}
+              disabled={recognizing || busy}
+              title="重新 AI 识别构件"
+            >
+              <Sparkles className="w-4 h-4" />
+              {recognizing ? "识别中..." : "重新识别"}
+            </button>
+          )}
+
           {/* 发送按钮 */}
           <button
             className={canSend ? "btn-primary" : "btn-secondary opacity-50 cursor-not-allowed"}
@@ -273,6 +406,22 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
             <Send className="w-4 h-4" />发送到 3D 场景
           </button>
         </div>
+
+        {/* AI 识别进度/结果 */}
+        {recognizeMsg && (
+          <div className={`text-xs flex items-center gap-1.5 mb-1 px-1 rounded py-1 ${
+            recognizePhase === "error" ? "text-eng-err bg-red-500/10" :
+            recognizePhase === "done"  ? "text-emerald-400 bg-emerald-500/10" :
+            recognizePhase === "recognizing" || recognizePhase === "sending" ? "text-primary bg-primary/10" :
+            "text-on-surface-variant"
+          }`}>
+            {(recognizePhase === "recognizing" || recognizePhase === "sending") && (
+              <span className="w-3 h-3 shrink-0 rounded-full border-2 border-current border-t-transparent animate-spin inline-block" />
+            )}
+            {recognizePhase === "error" && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
+            {recognizeMsg}
+          </div>
+        )}
 
         {/* 错误提示 */}
         {err && <div className="text-xs text-eng-err mb-2">{err}</div>}
