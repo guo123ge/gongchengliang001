@@ -2,6 +2,11 @@ node_modules
 .next
 out
 dist
+data
+uploads
+.smoke-data
+.smoke-uploads
+.hermes
 .env
 .env.local
 prisma/*.db

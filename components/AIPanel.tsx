@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useRef, useEffect } from "react";
 import { Send, Loader2, Bot, User as UserIcon, Sparkles, Settings, Zap, PlusCircle, Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -213,22 +213,13 @@ export default function AIPanel() {
   const abortRef = useRef<AbortController | null>(null);
 
   const [showConfigInline, setShowConfigInline] = useState(false);
-  const [inlineBaseUrl, setInlineBaseUrl] = useState("");
   const [inlineModel, setInlineModel] = useState("");
-  const [inlineApiKey, setInlineApiKey] = useState("");
 
   const send = async () => {
     const text = input.trim();
     if (!text) return;
 
     const cfg = loadAIConfig();
-    if (!cfg.apiKey || !cfg.baseUrl || !cfg.model) {
-      setShowConfigInline(true);
-      setInlineBaseUrl(cfg.baseUrl);
-      setInlineModel(cfg.model);
-      setInlineApiKey(cfg.apiKey);
-      return;
-    }
 
     const userMsg: Msg = { role: "user", content: text };
     const context = `当前模型 JSON：\n${JSON.stringify(components, null, 2)}`;
@@ -249,8 +240,6 @@ export default function AIPanel() {
         body: JSON.stringify({
           messages: [...next.map((m) => ({ role: m.role, content: m.content })),
             { role: "user" as const, content: context }],
-          baseUrl: cfg.baseUrl,
-          apiKey: cfg.apiKey,
           model: cfg.model,
           temperature: cfg.temperature,
           stream: true,
@@ -329,9 +318,7 @@ export default function AIPanel() {
           className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors"
           onClick={() => {
             const cfg = loadAIConfig();
-            setInlineBaseUrl(cfg.baseUrl);
             setInlineModel(cfg.model);
-            setInlineApiKey(cfg.apiKey);
             setShowConfigInline(true);
           }}
           title="修改 API 配置"
@@ -342,32 +329,9 @@ export default function AIPanel() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
-        {(() => {
-          const cfg = loadAIConfig();
-          const missing = !cfg.apiKey || !cfg.baseUrl || !cfg.model;
-          if (missing) {
-            return (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-3">
-                <div className="text-amber-400 text-xs font-medium mb-2">AI 接口尚未配置</div>
-                <div className="text-on-surface-variant text-xs mb-3">
-                  请在下方输入 Base URL、Model 和 API Key，或点击右上角「配置」按钮。
-                </div>
-                <button
-                  className="btn-primary text-xs"
-                  onClick={() => {
-                    setInlineBaseUrl(cfg.baseUrl);
-                    setInlineModel(cfg.model);
-                    setInlineApiKey(cfg.apiKey);
-                    setShowConfigInline(true);
-                  }}
-                >
-                  立即配置
-                </button>
-              </div>
-            );
-          }
-          return null;
-        })()}
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 mb-3 text-xs text-on-surface-variant">
+          AI Key 由服务器环境变量管理；如需切换模型，请点击右上角配置。
+        </div>
 
         {msgs.length === 0 && (
           <div className="text-on-surface-variant text-xs bg-surface-container-high/30 rounded-lg p-4">
@@ -431,17 +395,13 @@ export default function AIPanel() {
       {/* Inline Config */}
       {showConfigInline && (
         <div className="border-t border-outline-variant/20 p-3 bg-amber-500/10 space-y-2">
-          <div className="text-xs text-amber-400 font-medium">首次使用 AI 助手，请补充接口配置</div>
+          <div className="text-xs text-amber-400 font-medium">AI Key 已由服务器托管，可按需覆盖模型</div>
           <div className="flex gap-2">
-            <input className="input-eng flex-1 text-xs" placeholder="Base URL" value={inlineBaseUrl} onChange={(e) => setInlineBaseUrl(e.target.value)} />
             <input className="input-eng flex-1 text-xs" placeholder="Model" value={inlineModel} onChange={(e) => setInlineModel(e.target.value)} />
-          </div>
-          <div className="flex gap-2">
-            <input className="input-eng flex-1 text-xs" type="password" placeholder="API Key" value={inlineApiKey} onChange={(e) => setInlineApiKey(e.target.value)} />
             <button
               className="btn-primary text-xs whitespace-nowrap"
               onClick={() => {
-                saveAIConfig({ baseUrl: inlineBaseUrl, model: inlineModel, apiKey: inlineApiKey, temperature: 0.3 });
+                saveAIConfig({ model: inlineModel, temperature: 0.3 });
                 setShowConfigInline(false);
                 send();
               }}
@@ -471,3 +431,4 @@ export default function AIPanel() {
     </div>
   );
 }
+

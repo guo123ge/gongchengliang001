@@ -21,6 +21,15 @@ interface ClipPlane {
   enabled: boolean;
 }
 
+export type RightPanelTab = "params" | "validate" | "quantity" | "section";
+export type ValidationFilter = "all" | "issues" | "error" | "warn" | "pass";
+
+export interface ValidationFocus {
+  componentId: string;
+  rule?: string;
+  message?: string;
+}
+
 export interface Blueprint {
   imageUrl: string;     // PNG dataUrl
   widthMm: number;
@@ -45,6 +54,14 @@ interface State {
   saveStatus: "saved" | "saving" | "unsaved";
   components: Component[];
   selectedId: string | null;
+  rightPanelTab: RightPanelTab;
+  setRightPanelTab: (tab: RightPanelTab) => void;
+  focusedValidation: ValidationFocus | null;
+  setFocusedValidation: (focus: ValidationFocus | null) => void;
+  validationFilter: ValidationFilter;
+  setValidationFilter: (filter: ValidationFilter) => void;
+  validationSearch: string;
+  setValidationSearch: (keyword: string) => void;
   validations: ValidationItem[];
   clip: ClipPlane;
   showRebar: boolean;
@@ -122,7 +139,7 @@ function defaultComponent(type: ComponentType): Component {
     case "COLUMN":      geometry = { b: 500, h: 500, L: 3600 }; break;
     case "SHEAR_WALL":  geometry = { b: 200, h: 3000, L: 4000 }; break;
     case "SLAB":        geometry = { Lx: 6000, Ly: 4000, t: 120 }; break;
-    case "STAIR":       geometry = { b: 1200, h: 150, L: 3000, t: 120 }; break;
+    case "STAIR":       geometry = { b: 1200, h: 150, L: 3000, t: 120, stairSteps: 10, stairLandingLength: 1200, stairLandingThickness: 120 }; break;
     case "FOUND":       geometry = { Lx: 2400, Ly: 2400, t: 600 }; break;
     case "STRIP_FOUND": geometry = { b: 900, h: 400, L: 6000 }; break;
     case "PILE_CAP":    geometry = { Lx: 1800, Ly: 1800, t: 800 }; break;
@@ -140,6 +157,14 @@ export const useStore = create<State>((set, get) => ({
   saveStatus: "saved",
   components: [],
   selectedId: null,
+  rightPanelTab: "params",
+  setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
+  focusedValidation: null,
+  setFocusedValidation: (focus) => set({ focusedValidation: focus }),
+  validationFilter: "all",
+  setValidationFilter: (filter) => set({ validationFilter: filter }),
+  validationSearch: "",
+  setValidationSearch: (keyword) => set({ validationSearch: keyword }),
   validations: [],
   clip: { axis: "x", position: 0, enabled: false },
   showRebar: true,

@@ -467,6 +467,7 @@ export function collisionsToValidations(collisions: CollisionResult[]): Validati
 /** 将碰撞结果转换为 THREE.js 可视化数据 */
 export interface CollisionVisual {
   id: string;
+  componentId?: string;
   center: [number, number, number]; // 米
   size: [number, number, number]; // 米
   color: number;
@@ -487,6 +488,7 @@ export function collisionsToVisuals(collisions: CollisionResult[]): CollisionVis
       const sz = (aabb.maxZ - aabb.minZ) / 1000;
       return {
         id: c.id,
+        componentId: c.idA,
         center: [cx, cy, cz],
         size: [Math.max(sx, 0.01), Math.max(sy, 0.01), Math.max(sz, 0.01)],
         color: c.severity === "error" ? 0xef4444 : 0xf59e0b,

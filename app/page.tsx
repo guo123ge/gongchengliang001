@@ -12,6 +12,7 @@ import WelcomeEmpty from "@/components/WelcomeEmpty";
 import LandingOverlay from "@/components/LandingOverlay";
 import RebarInfoPopup from "@/components/RebarInfoPopup";
 import { useStore } from "@/lib/store";
+import LoginGate from "@/components/LoginGate";
 
 const Scene3D = dynamic(() => import("@/components/Scene3D"), { ssr: false });
 
@@ -140,6 +141,7 @@ export default function Home() {
   };
 
   return (
+    <LoginGate>
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background text-on-background">
       <LandingOverlay open={landingOpen} onClose={() => setLandingOpen(false)} />
       {/* ─── TopNavBar ─── */}
@@ -233,5 +235,6 @@ export default function Home() {
         </div>
       </div>
     </div>
+    </LoginGate>
   );
 }

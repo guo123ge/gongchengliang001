@@ -1,19 +1,33 @@
 "use client";
-import { useMemo } from "react";
+
+import { Fragment, useMemo } from "react";
 import { useStore } from "@/lib/store";
-import { calcAll, aggregate } from "@/lib/quantity/calc";
+import { aggregate, calcAll } from "@/lib/quantity/calc";
 import { fmt } from "@/lib/utils";
+import type { ComponentType } from "@/lib/types";
+
+const TYPE_LABELS: Record<ComponentType, string> = {
+  BEAM: "框架梁",
+  COLUMN: "框架柱",
+  SHEAR_WALL: "剪力墙",
+  SLAB: "楼板",
+  STAIR: "AT型楼梯",
+  FOUND: "独立基础",
+  STRIP_FOUND: "条形基础",
+  PILE_CAP: "桩基承台",
+  PILE: "灌注桩",
+  RAFT: "筏板基础",
+};
 
 export default function QuantityPanel() {
   const components = useStore((s) => s.components);
   const results = useMemo(() => calcAll(components), [components]);
   const agg = useMemo(() => aggregate(results), [results]);
 
-  if (components.length === 0) return <div className="p-4 text-on-surface-variant text-sm">尚无构件，请先添加。</div>;
+  if (components.length === 0) return <div className="p-4 text-on-surface-variant text-sm">暂无构件，请先添加。</div>;
 
   return (
     <div className="p-4 space-y-4 text-sm tabular">
-      {/* 总量汇总 */}
       <div className="property-card">
         <div className="property-card-header">总量汇总</div>
         <div className="grid grid-cols-3 gap-4">
@@ -23,7 +37,6 @@ export default function QuantityPanel() {
         </div>
       </div>
 
-      {/* 构件明细 */}
       <div className="property-card !p-0">
         <div className="px-4 py-3 border-b border-outline-variant/20 text-label-code text-on-surface-variant uppercase tracking-wider">
           构件明细
@@ -41,22 +54,32 @@ export default function QuantityPanel() {
             </thead>
             <tbody>
               {results.map((r) => (
-                <tr key={r.componentId} className="border-t border-outline-variant/10 hover:bg-surface-container-high/30 transition-colors">
-                  <td className="px-3 py-2 text-on-surface">{r.name}</td>
-                  <td className="px-3 py-2">
-                    <span className="quantity-chip">{r.type}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-primary">{fmt(r.concreteVolume, 3)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-secondary">{fmt(r.formworkArea, 2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-tertiary">{fmt(r.totalRebarWeight, 1)}</td>
-                </tr>
+                <Fragment key={r.componentId}>
+                  <tr className="border-t border-outline-variant/10 hover:bg-surface-container-high/30 transition-colors">
+                    <td className="px-3 py-2 text-on-surface">{r.name}</td>
+                    <td className="px-3 py-2">
+                      <span className="quantity-chip">{TYPE_LABELS[r.type] ?? r.type}</span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-primary">{fmt(r.concreteVolume, 3)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-secondary">{fmt(r.formworkArea, 2)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-tertiary">{fmt(r.totalRebarWeight, 1)}</td>
+                  </tr>
+                  {r.notes && r.notes.length > 0 && (
+                    <tr className="border-t border-outline-variant/5 bg-surface-container-high/10">
+                      <td className="px-3 py-2 text-[11px] text-on-surface-variant" colSpan={5}>
+                        {r.notes.map((note) => (
+                          <div key={note}>计算说明：{note}</div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 钢筋规格汇总 */}
       <div className="property-card !p-0">
         <div className="px-4 py-3 border-b border-outline-variant/20 text-label-code text-on-surface-variant uppercase tracking-wider">
           钢筋规格汇总

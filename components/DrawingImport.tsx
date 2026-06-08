@@ -17,11 +17,13 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [fileRef, setFileRef] = useState<File | null>(null);
+  const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const setBlueprint = useStore((s) => s.setBlueprint);
-  const addComponentFromAI = (c: any) => {
+  const projectId = useStore((s) => s.projectId);
+  const addComponentFromAI = useCallback((c: any) => {
     useStore.setState((s) => ({ components: [...s.components, c] }));
     useStore.getState().revalidate();
-  };
+  }, []);
   const [recognizing, setRecognizing] = useState(false);
   const [recognizeMsg, setRecognizeMsg] = useState("");
   const [recognizePhase, setRecognizePhase] = useState<"idle"|"sending"|"recognizing"|"done"|"error">("idle");
@@ -56,10 +58,13 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
     setErr("");
     setName(f.name);
     setDxf(null);
+    setUploadedFileId(null);
     if (url) URL.revokeObjectURL(url);
     setUrl(null);
     setPdfRenderResult(null);
     setPdfPageCount(0);
+
+    uploadFile(f).catch((e) => setErr(`文件上传失败：${e?.message ?? e}`));
 
     if (/\.dxf$/i.test(f.name)) {
       setMode("dxf");
@@ -97,6 +102,53 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       setErr("未识别的文件类型（支持 DXF / PDF / PNG / JPG）");
     }
   };
+
+  const uploadFile = useCallback(async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append("file", file);
+    if (projectId) form.append("projectId", projectId);
+    const r = await fetch("/api/uploads", { method: "POST", body: form });
+    const result = await r.json();
+    if (!r.ok || result.error) throw new Error(result.error || "上传失败");
+    setUploadedFileId(result.file.id);
+    return result.file.id;
+  }, [projectId]);
+
+  const dataUrlToFile = useCallback(async (dataUrl: string, name: string) => {
+    const resp = await fetch(dataUrl);
+    const blob = await resp.blob();
+    return new File([blob], name, { type: blob.type || "image/png" });
+  }, []);
+
+  const pollOcrJob = useCallback(async (jobId: string) => {
+    for (let i = 0; i < 90; i++) {
+      const r = await fetch(`/api/ocr/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
+      const result = await r.json();
+      if (!r.ok || result.error) throw new Error(result.error || "OCR 任务查询失败");
+      const job = result.job;
+      setRecognizeMsg(`AI 识别任务${job.status === "running" ? "运行中" : "排队中"}，进度 ${job.progress ?? 0}%...`);
+      if (job.status === "succeeded") return job.result ?? {};
+      if (job.status === "failed") throw new Error(job.error || "OCR 识别失败");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    throw new Error("OCR 任务超时");
+  }, []);
+
+  const recognizeViaQueue = useCallback(async (sourceDataUrl: string, sourceFile?: File | null) => {
+    let fileId = uploadedFileId;
+    if (!fileId || sourceFile?.type === "application/pdf") {
+      const imageFile = await dataUrlToFile(sourceDataUrl, `ocr-page-${Date.now()}.png`);
+      fileId = await uploadFile(imageFile);
+    }
+    const r = await fetch("/api/ocr/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileId, projectId }),
+    });
+    const result = await r.json();
+    if (!r.ok || result.error) throw new Error(result.error || "OCR 任务创建失败");
+    return pollOcrJob(result.job.id);
+  }, [dataUrlToFile, pollOcrJob, projectId, uploadFile, uploadedFileId]);
 
   // ─── PDF 翻页 ───
 
@@ -181,43 +233,27 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
       return;
     }
 
-    // Step 2: AI 识别构件
+    // Step 2: OCR queue recognition
     setRecognizePhase("recognizing");
-    setRecognizeMsg("底图已加载，正在 AI 识别构件...");
+    setRecognizeMsg("底图已加载，正在创建 AI 识别任务...");
     try {
-      const cfg = (await import("./SettingsDialog")).loadAIConfig();
-      if (!cfg.apiKey || !cfg.baseUrl || !cfg.model) {
-        setRecognizePhase("idle");
-        setRecognizeMsg("底图已加载到 3D 场景。如需 AI 识别，请先在设置中配置 API Key，然后点击「AI 识别构件」。");
-        return;
-      }
-      const r = await fetch("/api/ai/recognize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: dataUrl, baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model }),
-      });
-      const result = await r.json();
-      if (!r.ok || result.error) {
-        setRecognizePhase("error");
-        setRecognizeMsg(`底图已加载。AI 识别失败：${result.error}`);
-        return;
-      }
+      const result = await recognizeViaQueue(dataUrl, file);
       const comps: any[] = result.components ?? [];
       if (comps.length === 0) {
         setRecognizePhase("done");
-        setRecognizeMsg("底图已加载。AI 未识别到构件，可尝试更换模型或手动添加。");
+        setRecognizeMsg("底图已加载，AI 未识别到构件，可尝试更换模型或手动添加。");
         return;
       }
       comps.forEach(addComponentFromAI);
       setRecognizePhase("done");
-      setRecognizeMsg(`✓ 已自动识别并添加 ${comps.length} 个构件${result.notes ? "，AI提示: " + result.notes : ""}`);
+      setRecognizeMsg(`已自动识别并添加 ${comps.length} 个构件${result.notes ? "，AI提示: " + result.notes : ""}`);
     } catch (e: any) {
       setRecognizePhase("error");
-      setRecognizeMsg(`底图已加载。AI 识别出错：${e?.message}`);
+      setRecognizeMsg(`底图已加载，AI 识别出错：${e?.message}`);
     } finally {
       setRecognizing(false);
     }
-  }, [addComponentFromAI, setBlueprint]);
+  }, [addComponentFromAI, recognizeViaQueue, setBlueprint]);
 
   // ─── 手动重试 ───
 
@@ -476,6 +512,8 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
             {busy && <div className="text-slate-400 text-xs p-6">解析中...</div>}
             {!busy && mode === "none" && <div className="text-slate-400 text-xs p-6">尚未导入文件</div>}
             {!busy && (mode === "image" || mode === "pdf") && url && (
+              // Local blob/data URLs are previews, so Next image optimization is not useful here.
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={url} alt="drawing" className="max-w-full max-h-full" />
             )}
             {!busy && mode === "dxf" && dxf && (
@@ -506,3 +544,4 @@ export default function DrawingImport({ onClose, defaultAccept }: { onClose: () 
     </div>
   );
 }
+

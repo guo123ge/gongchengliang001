@@ -113,7 +113,7 @@ export default function TopBar() {
     try {
       const results = calcAll(components);
       const blob = await exportExcel(components, results);
-      saveAs(blob, `${projectName}-工程量.xlsx`);
+      saveAs(blob, `${projectName}-工程量汇总.xlsx`);
     } finally { setBusy(false); }
   };
 

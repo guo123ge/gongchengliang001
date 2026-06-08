@@ -1,4 +1,3 @@
-// IndexedDB 持久化层 — 零后端依赖的本地存储
 import type { Component } from "./types";
 import type { Blueprint } from "./store";
 
@@ -39,8 +38,31 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-/** 保存项目记录 */
+async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(url, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!resp.ok) throw new Error(await resp.text().catch(() => `HTTP ${resp.status}`));
+  return resp.json() as Promise<T>;
+}
+
+function canUseServerApi() {
+  return typeof window !== "undefined";
+}
+
 export async function saveProject(record: ProjectRecord): Promise<void> {
+  if (canUseServerApi()) {
+    try {
+      await apiJson(`/api/projects/${encodeURIComponent(record.id)}`, {
+        method: "PUT",
+        body: JSON.stringify(record),
+      });
+      return;
+    } catch (e) {
+      console.warn("服务器保存失败，回退 IndexedDB", e);
+    }
+  }
   const db = await openDB();
   const tx = db.transaction(STORE_PROJECTS, "readwrite");
   tx.objectStore(STORE_PROJECTS).put(record);
@@ -50,8 +72,15 @@ export async function saveProject(record: ProjectRecord): Promise<void> {
   });
 }
 
-/** 加载单个项目 */
 export async function loadProject(id: string): Promise<ProjectRecord | null> {
+  if (canUseServerApi()) {
+    try {
+      const data = await apiJson<{ project: ProjectRecord }>(`/api/projects/${encodeURIComponent(id)}`);
+      return data.project;
+    } catch (e) {
+      console.warn("服务器加载失败，回退 IndexedDB", e);
+    }
+  }
   const db = await openDB();
   const tx = db.transaction(STORE_PROJECTS, "readonly");
   const req = tx.objectStore(STORE_PROJECTS).get(id);
@@ -61,8 +90,15 @@ export async function loadProject(id: string): Promise<ProjectRecord | null> {
   });
 }
 
-/** 列出所有项目（仅元数据，不含 components 大字段） */
 export async function listProjects(): Promise<ProjectRecord[]> {
+  if (canUseServerApi()) {
+    try {
+      const data = await apiJson<{ projects: ProjectRecord[] }>("/api/projects");
+      return data.projects;
+    } catch (e) {
+      console.warn("服务器列表失败，回退 IndexedDB", e);
+    }
+  }
   const db = await openDB();
   const tx = db.transaction(STORE_PROJECTS, "readonly");
   const req = tx.objectStore(STORE_PROJECTS).getAll();
@@ -76,8 +112,15 @@ export async function listProjects(): Promise<ProjectRecord[]> {
   });
 }
 
-/** 删除项目 */
 export async function deleteProject(id: string): Promise<void> {
+  if (canUseServerApi()) {
+    try {
+      await apiJson(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+      return;
+    } catch (e) {
+      console.warn("服务器删除失败，回退 IndexedDB", e);
+    }
+  }
   const db = await openDB();
   const tx = db.transaction(STORE_PROJECTS, "readwrite");
   tx.objectStore(STORE_PROJECTS).delete(id);
@@ -87,7 +130,6 @@ export async function deleteProject(id: string): Promise<void> {
   });
 }
 
-/** 读取 meta 值 */
 export async function getMeta(key: string): Promise<string | number | null> {
   const db = await openDB();
   const tx = db.transaction(STORE_META, "readonly");
@@ -98,7 +140,6 @@ export async function getMeta(key: string): Promise<string | number | null> {
   });
 }
 
-/** 写入 meta 值 */
 export async function setMeta(key: string, value: string | number): Promise<void> {
   const db = await openDB();
   const tx = db.transaction(STORE_META, "readwrite");
@@ -109,12 +150,10 @@ export async function setMeta(key: string, value: string | number): Promise<void
   });
 }
 
-/** 生成短 ID */
 export function genProjectId(): string {
   return `proj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Type guard: IndexedDB 是否可用 */
 export function isIndexedDBAvailable(): boolean {
   try {
     return typeof indexedDB !== "undefined" && !!indexedDB.open;

@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { PanelRightOpen, PanelRight, Settings2, Sparkles, X } from "lucide-react";
 import ParamForm from "./ParamForm";
@@ -7,9 +6,9 @@ import ValidationPanel from "./ValidationPanel";
 import QuantityPanel from "./QuantityPanel";
 import SectionView from "./SectionView";
 import AIPanel from "./AIPanel";
-import { useStore } from "@/lib/store";
+import { useStore, type RightPanelTab } from "@/lib/store";
 
-type Tab = "params" | "validate" | "quantity" | "section";
+type Tab = RightPanelTab;
 
 const TABS: { k: Tab; label: string }[] = [
   { k: "params",   label: "参数" },
@@ -24,7 +23,8 @@ interface Props {
 }
 
 export default function RightPanel({ collapsed, onToggle }: Props) {
-  const [tab, setTab] = useState<Tab>("params");
+  const tab = useStore((s) => s.rightPanelTab);
+  const setTab = useStore((s) => s.setRightPanelTab);
   const aiOpen    = useStore((s) => s.aiOpen);
   const setAiOpen = useStore((s) => s.setAiOpen);
 

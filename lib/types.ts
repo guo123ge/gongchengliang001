@@ -18,6 +18,43 @@ export type ConcreteGrade =
 export type SeismicLevel = "NONE" | "ONE" | "TWO" | "THREE" | "FOUR";
 export type EnvClass = "Ia" | "Ib" | "IIa" | "IIb" | "IIIa" | "IIIb";
 
+export interface OpeningSpec {
+  id?: string;
+  x: number;
+  y?: number;
+  z?: number;
+  width: number;
+  height: number;
+  reinforced?: boolean;
+  extraRebarArea?: number;
+}
+
+export interface VariableSectionSpec {
+  enabled?: boolean;
+  fromB?: number;
+  fromH?: number;
+  toB?: number;
+  toH?: number;
+  transitionLength?: number;
+}
+
+export interface SpecialSeismicNodeSpec {
+  enabled?: boolean;
+  nodeType?: "beam-column" | "transfer" | "wall-boundary" | "custom";
+  hoopSpacing?: number;
+  hoopDiameter?: number;
+  anchorLength?: number;
+  boundaryLength?: number;
+  transferDepth?: number;
+  detailReference?: string;
+  note?: string;
+}
+
+export interface SlabSupportSpec {
+  type?: "end" | "continuous" | "cantilever";
+  spanRatio?: number;
+}
+
 /** 钢筋描述（简化版原位标注） */
 export interface Rebar {
   id: string;
@@ -53,6 +90,19 @@ export interface Geometry {
   Ly?: number;
   t?: number;
   D?: number;
+  /** AT 楼梯踏步数量，用于斜板、踏步附加体积和模板面积估算。 */
+  stairSteps?: number;
+  /** AT 楼梯休息平台长度，用于平台板混凝土和模板估算。 */
+  stairLandingLength?: number;
+  /** AT 楼梯休息平台板厚，未填时默认取梯板厚度。 */
+  stairLandingThickness?: number;
+  /** 阶段 C：洞口信息，用于洞口加强校验。 */
+  openings?: OpeningSpec[];
+  /** 阶段 C：变截面构造信息，用于纵筋弯折和过渡段校验。 */
+  variableSection?: VariableSectionSpec;
+  /** 阶段 C：特殊抗震节点信息，用于节点箍筋加密校验。 */
+  specialSeismicNode?: SpecialSeismicNodeSpec;
+  slabSupport?: SlabSupportSpec;
   /** 框架梁端支座处柱截面宽度 mm（用于锚固类型判断）。
    *  直锚条件：hc - cover ≥ laE；否则按弯锚计算。默认 500。*/
   hc?: number;
@@ -110,4 +160,5 @@ export interface QuantityResult {
   formworkArea: number;     // m²
   rebarByDia: Record<string, { weight: number; length: number; grade: RebarGrade }>; // key: "HRB400-20"
   totalRebarWeight: number; // kg
+  notes?: string[];
 }

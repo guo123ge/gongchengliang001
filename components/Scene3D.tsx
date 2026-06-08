@@ -10,6 +10,10 @@ import { buildComponentObject } from "@/lib/three/geometry";
 import { buildInstancedScene, getComponentIdFromHit } from "@/lib/three/instanced";
 import { endpointsToScene } from "@/lib/dxf/parser";
 import { detectCollisions, collisionsToVisuals } from "@/lib/g101/collision";
+import { phaseBToVisuals } from "@/lib/g101/phaseBVisuals";
+import { phaseCToVisuals } from "@/lib/g101/phaseCVisuals";
+import type { CollisionVisual } from "@/lib/g101/collision";
+import type { ValidationFocus } from "@/lib/store";
 
 export default function Scene3D() {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -34,6 +38,7 @@ export default function Scene3D() {
   const setClip = useStore((s) => s.setClip);
   const selectedRebarId = useStore((s) => s.selectedRebarId);
   const setSelectedRebar = useStore((s) => s.setSelectedRebar);
+  const focusedValidation = useStore((s) => s.focusedValidation);
   const gizmoMode = useStore((s) => s.gizmoMode);
   const cameraView = useStore((s) => s.cameraView);
   const setCameraView = useStore((s) => s.setCameraView);
@@ -260,6 +265,24 @@ export default function Scene3D() {
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       ray.setFromCamera(mouse, camera);
+      const markerHits = collisionGroupRef.current ? ray.intersectObjects(collisionGroupRef.current.children, true) : [];
+      if (markerHits.length > 0) {
+        let markerTarget: THREE.Object3D | null = markerHits[0].object;
+        while (markerTarget && markerTarget.userData.kind !== "collision") markerTarget = markerTarget.parent;
+        if (markerTarget?.userData.componentId) {
+          const componentId = markerTarget.userData.componentId as string;
+          const label = typeof markerTarget.userData.label === "string" ? markerTarget.userData.label : "";
+          useStore.getState().setSelectedRebar(null);
+          select(componentId);
+          useStore.getState().setFocusedValidation({
+            componentId,
+            message: label,
+          });
+          useStore.getState().setRightPanelTab("validate");
+          return;
+        }
+      }
+
       const hits = ray.intersectObjects(group.children, true);
       if (hits.length > 0) {
         const first = hits[0];
@@ -415,32 +438,41 @@ export default function Scene3D() {
         });
       }
 
-      if (showCollisions && components.length >= 2) {
-        const collisions = detectCollisions(components);
-        const visuals = collisionsToVisuals(collisions);
+      if (showCollisions && components.length > 0) {
+        const collisions = components.length >= 2 ? detectCollisions(components) : [];
+        const visuals = [...collisionsToVisuals(collisions), ...phaseBToVisuals(components), ...phaseCToVisuals(components)];
         for (const v of visuals) {
+          const isFocused = isFocusedIssueVisual(v, focusedValidation);
           const geo = new THREE.BoxGeometry(v.size[0], v.size[1], v.size[2]);
           const mat = new THREE.MeshBasicMaterial({
             color: v.color,
             transparent: true,
-            opacity: v.opacity,
+            opacity: isFocused ? Math.min(v.opacity + 0.28, 0.78) : v.opacity,
             depthWrite: false,
           });
           const mesh = new THREE.Mesh(geo, mat);
+          if (isFocused) mesh.scale.setScalar(1.18);
           mesh.position.set(v.center[0], v.center[1], v.center[2]);
-          mesh.userData = { kind: "collision", label: v.label };
+          mesh.userData = { kind: "collision", label: v.label, componentId: v.componentId };
           collisionGroup.add(mesh);
 
           // 添加边框线
           const edges = new THREE.EdgesGeometry(geo);
-          const lineMat = new THREE.LineBasicMaterial({ color: v.color, transparent: true, opacity: 0.7 });
+          const lineMat = new THREE.LineBasicMaterial({ color: isFocused ? 0xffffff : v.color, transparent: true, opacity: isFocused ? 1 : 0.7 });
           const line = new THREE.LineSegments(edges, lineMat);
+          if (isFocused) line.scale.setScalar(1.22);
           line.position.copy(mesh.position);
+          line.userData = { kind: "collision", label: v.label, componentId: v.componentId };
           collisionGroup.add(line);
+
+          const label = makeIssueLabelSprite(v.label, isFocused ? 0xffffff : v.color, isFocused);
+          label.position.set(v.center[0], v.center[1] + v.size[1] / 2 + (isFocused ? 0.32 : 0.22), v.center[2]);
+          label.userData = { kind: "collision", label: v.label, componentId: v.componentId };
+          collisionGroup.add(label);
         }
       }
     }
-  }, [components, showConcrete, concreteOpacity, showRebar, selectedId, clip, gizmoMode, showCollisions]);
+  }, [components, showConcrete, concreteOpacity, showRebar, selectedId, clip, gizmoMode, showCollisions, focusedValidation]);
 
   // 同步 DXF 蓝图底图（地面平面贴图） + 蓝图 TransformControls + 吸附端点
   useEffect(() => {
@@ -616,6 +648,46 @@ export default function Scene3D() {
 function getClipPlane(axis: "x" | "y" | "z", pos: number): THREE.Plane {
   const n = new THREE.Vector3(axis === "x" ? 1 : 0, axis === "y" ? 1 : 0, axis === "z" ? 1 : 0);
   return new THREE.Plane(n, -pos / 1000);
+}
+
+function isFocusedIssueVisual(v: CollisionVisual, focus: ValidationFocus | null): boolean {
+  if (!focus || focus.componentId !== v.componentId) return false;
+  const text = `${v.label} ${focus.rule ?? ""} ${focus.message ?? ""}`.toLowerCase();
+  if (!focus.rule && !focus.message) return true;
+  if (focus.rule?.includes("洞口")) return text.includes("洞口");
+  if (focus.rule?.includes("变截面")) return text.includes("变截面");
+  if (focus.rule?.includes("特殊抗震节点")) return text.includes("特殊抗震节点") || text.includes("抗震节点");
+  if (focus.rule?.includes("碰撞")) return true;
+  if (focus.message && v.label.includes(focus.message)) return true;
+  return Boolean(focus.message && focus.message.includes(v.label));
+}
+
+function makeIssueLabelSprite(text: string, color: number, focused = false): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+  const fontSize = focused ? 30 : 28;
+  const maxLength = focused ? 40 : 34;
+  const shortText = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
+  const width = Math.ceil(ctx.measureText(shortText).width + (focused ? 36 : 28));
+  canvas.width = Math.max(width, focused ? 220 : 180);
+  canvas.height = focused ? 56 : 48;
+  ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
+  ctx.fillStyle = focused ? "rgba(2,12,28,0.94)" : "rgba(5,20,36,0.86)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = `#${color.toString(16).padStart(6, "0")}`;
+  ctx.lineWidth = focused ? 5 : 3;
+  ctx.strokeRect(1.5, 1.5, canvas.width - 3, canvas.height - 3);
+  ctx.fillStyle = "rgba(255,255,255,0.96)";
+  ctx.fillText(shortText, focused ? 18 : 14, focused ? 38 : 34);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  const height = focused ? 0.4 : 0.32;
+  sprite.scale.set((canvas.width / canvas.height) * height, height, 1);
+  sprite.renderOrder = 1001;
+  return sprite;
 }
 
 function buildDimensionLabels(c: Component): THREE.Object3D[] {

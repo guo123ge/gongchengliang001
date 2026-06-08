@@ -1,17 +1,25 @@
-// 工程量计算（阶段 A + B）
 import type { Component, QuantityResult, Rebar } from "../types";
-import { REBAR_UNIT_WEIGHT, La, LaE, stirrupHookLength, pileEmbedDepth } from "../g101/tables";
+import { La, LaE, REBAR_UNIT_WEIGHT, pileEmbedDepth, stirrupHookLength } from "../g101/tables";
 
-/** 框架梁端支座纵筋锚固长度 — 22G101-1 第2-39页
- *  直锚条件：hc - cover ≥ laE
- *  弯锚：水平段 = max(0.4×laE, hc-cover)，竖直弯折 ≥ 15d */
-function beamEndAnchor(hc: number, cover: number, laE_val: number, d: number): number {
-  const horiz = hc - cover;                             // 水平直段长度
-  if (horiz >= laE_val) return laE_val;                  // 直锚
-  return Math.max(0.4 * laE_val, horiz) + 15 * d;       // 弯锚
+function beamEndAnchor(hc: number, cover: number, laEValue: number, d: number): number {
+  const horizontal = hc - cover;
+  if (horizontal >= laEValue) return laEValue;
+  return Math.max(0.4 * laEValue, horizontal) + 15 * d;
 }
 
-/** 构件几何体积 m³ 与模板面积 m² */
+function stairDerived(g: Component["geometry"]) {
+  const width = Math.max(0, g.b ?? 0);
+  const horizontal = Math.max(0, g.L ?? 0);
+  const riser = Math.max(0, g.h ?? 0);
+  const thickness = Math.max(0, g.t ?? 0);
+  const steps = Math.max(1, Math.round(g.stairSteps ?? 10));
+  const landingLength = Math.max(0, g.stairLandingLength ?? 0);
+  const landingThickness = Math.max(0, g.stairLandingThickness ?? thickness);
+  const totalRise = riser * steps;
+  const slopeLength = Math.hypot(horizontal, totalRise);
+  return { width, horizontal, riser, thickness, steps, landingLength, landingThickness, totalRise, slopeLength };
+}
+
 function geomMetrics(c: Component): { volume: number; formwork: number } {
   const g = c.geometry;
   if (c.type === "BEAM" || c.type === "COLUMN") {
@@ -19,7 +27,7 @@ function geomMetrics(c: Component): { volume: number; formwork: number } {
     const h = (g.h ?? 0) / 1000;
     const L = (g.L ?? 0) / 1000;
     const volume = b * h * L;
-    const formwork = c.type === "BEAM" ? (2 * h * L + b * L) : 2 * (b + h) * L;
+    const formwork = c.type === "BEAM" ? 2 * h * L + b * L : 2 * (b + h) * L;
     return { volume, formwork };
   }
   if (c.type === "SLAB") {
@@ -34,17 +42,29 @@ function geomMetrics(c: Component): { volume: number; formwork: number } {
     return { volume: Math.PI * (D / 2) ** 2 * L, formwork: Math.PI * D * L };
   }
   if (c.type === "SHEAR_WALL") {
-    const b = (g.b ?? 0) / 1000;  // 厚度
-    const h = (g.h ?? 0) / 1000;  // 层高
-    const L = (g.L ?? 0) / 1000;  // 长度
+    const b = (g.b ?? 0) / 1000;
+    const h = (g.h ?? 0) / 1000;
+    const L = (g.L ?? 0) / 1000;
     return { volume: b * h * L, formwork: 2 * h * L };
   }
   if (c.type === "STAIR") {
-    // 斜板简化：水平投影面积 × 板厚
-    const b = (g.b ?? 0) / 1000;
-    const L = (g.L ?? 0) / 1000;
-    const t = (g.t ?? 0) / 1000;
-    return { volume: b * L * t, formwork: b * L };
+    const stair = stairDerived(g);
+    const b = stair.width / 1000;
+    const L = stair.horizontal / 1000;
+    const h = stair.riser / 1000;
+    const t = stair.thickness / 1000;
+    const slope = stair.slopeLength / 1000;
+    const landingL = stair.landingLength / 1000;
+    const landingT = stair.landingThickness / 1000;
+    const tread = L / stair.steps;
+    const slabVolume = b * slope * t;
+    const stepVolume = 0.5 * b * L * h;
+    const landingVolume = b * landingL * landingT;
+    const bottomFormwork = b * slope;
+    const landingFormwork = landingL > 0 ? b * landingL + 2 * (b + landingL) * landingT : 0;
+    const sideFormwork = 2 * (slope * t + stair.steps * (tread * h + 0.5 * tread * h));
+    const riserFormwork = b * h * stair.steps;
+    return { volume: slabVolume + stepVolume + landingVolume, formwork: bottomFormwork + landingFormwork + sideFormwork + riserFormwork };
   }
   if (c.type === "FOUND" || c.type === "PILE_CAP") {
     const Lx = (g.Lx ?? 0) / 1000;
@@ -67,7 +87,30 @@ function geomMetrics(c: Component): { volume: number; formwork: number } {
   return { volume: 0, formwork: 0 };
 }
 
-/** 单类钢筋总长 m + 根数（含分段加密） */
+function quantityNotes(c: Component): string[] {
+  const g = c.geometry;
+  if (c.type === "STAIR") {
+    const stair = stairDerived(g);
+    return [
+      `楼梯斜板长度约 ${Math.round(stair.slopeLength)}mm，踏步数 ${stair.steps}。`,
+      stair.landingLength > 0
+        ? `休息平台长度 ${stair.landingLength}mm、平台板厚 ${stair.landingThickness}mm 已纳入混凝土、模板和钢筋长度估算。`
+        : "未录入休息平台长度，当前仅计算梯段斜板和踏步附加量。",
+      "楼梯混凝土按斜板体积、踏步三角附加体积和平台板体积分项估算。",
+    ];
+  }
+  if (c.type === "SLAB" && g.slabSupport) {
+    const supportName = g.slabSupport.type === "continuous" ? "连续支座" : g.slabSupport.type === "cantilever" ? "悬挑支座" : "端支座";
+    return [`板支座按${supportName}取值，负筋外伸比例 ${g.slabSupport.spanRatio ?? "默认"} 已参与校验和钢筋长度估算。`];
+  }
+  if (c.type === "PILE") return ["灌注桩钢筋按主筋、螺旋箍、加劲箍分项估算，并计入桩顶嵌入承台长度。"];
+  return [];
+}
+
+function gridCount(length: number, spacing?: number): number {
+  return spacing && spacing > 0 ? Math.floor(length / spacing) + 1 : 0;
+}
+
 function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTotal: number } {
   const g = c.geometry;
   const cover = c.concrete.cover;
@@ -79,55 +122,42 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const b = g.b ?? 0;
     const h = g.h ?? 0;
     if (r.role === "STIRRUP") {
-      // 箍筋周长 + 弯钩 — 22G101-1 第2-7页
-      // 抗震：135°弯钩，弯后直段 ≥ 10d 且 ≥ 75mm
-      // 非抗震：90°弯钩，弯后直段 ≥ 5d
       const hook = stirrupHookLength(r.diameter, seismic);
       const per = 2 * ((b - 2 * cover) + (h - 2 * cover)) + 2 * hook;
-      // 分段：两端加密 + 中部非加密
-      const dz = r.densifyLength ?? 0;
-      const ds = r.densifySpacing;
-      const ns = r.spacing ?? 0;
+      const denseLength = r.densifyLength ?? 0;
+      const denseSpacing = r.densifySpacing;
+      const spacing = r.spacing ?? 0;
       let n = 0;
-      if (dz > 0 && ds && ds > 0) {
-        n += 2 * (Math.floor(dz / ds) + 1);
-        const middle = Math.max(0, L - 2 * dz);
-        if (ns > 0 && middle > 0) n += Math.max(0, Math.floor(middle / ns) - 1);
-      } else if (ns > 0) {
-        n = Math.floor(L / ns) + 1;
+      if (denseLength > 0 && denseSpacing && denseSpacing > 0) {
+        n += 2 * (Math.floor(denseLength / denseSpacing) + 1);
+        const middle = Math.max(0, L - 2 * denseLength);
+        if (spacing > 0 && middle > 0) n += Math.max(0, Math.floor(middle / spacing) - 1);
+      } else if (spacing > 0) {
+        n = Math.floor(L / spacing) + 1;
       }
       return { totalLenM: (per * n) / 1000, countTotal: n };
     }
-    if (r.role === "SIDE" || r.role === "LONGITUDINAL") {
-      // 侧面构造筋 — 22G101-1 第2-41页：锚固/搭接长度可取为 15d
+
+    if (r.role === "SIDE" || (c.type === "BEAM" && r.role === "LONGITUDINAL")) {
       const n = r.count ?? 0;
       const perBar = L + 2 * 15 * r.diameter;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
-    // ── BEAM 上/下部纵筋精确锚固 ── 22G101-1 第2-39页
+
     if (c.type === "BEAM") {
-      const hc = g.hc ?? 500;  // 支座柱截面宽，默认 500mm
-      const laE_val = seismic
-        ? LaE(c.concrete.grade, r.grade, r.diameter, c.concrete.seismic)
-        : la;
-      if (r.role === "TOP" || r.role === "BENT" || r.role === "ADDITIONAL") {
-        // 上部主筋/弯起筋/附加筋：两端入柱锚固（弯锚或直锚）
-        const anchor = beamEndAnchor(hc, cover, laE_val, r.diameter);
+      const hc = g.hc ?? 500;
+      const laEValue = seismic ? LaE(c.concrete.grade, r.grade, r.diameter, c.concrete.seismic) : la;
+      if (r.role === "TOP" || r.role === "BENT" || r.role === "ADDITIONAL" || r.role === "BOTTOM") {
+        const anchor = beamEndAnchor(hc, cover, laEValue, r.diameter);
         const n = r.count ?? 0;
         return { totalLenM: ((L + 2 * anchor) * n) / 1000, countTotal: n };
       }
       if (r.role === "ERECTION") {
-        // 架立筋：与上部通长筋搭接，每端搭接 150mm — 22G101-1 第2-39页
         const n = r.count ?? 0;
         return { totalLenM: ((L + 2 * 150) * n) / 1000, countTotal: n };
       }
-      if (r.role === "BOTTOM") {
-        // 下部纵筋：端支座锚固同上部主筋规则
-        const anchor = beamEndAnchor(hc, cover, laE_val, r.diameter);
-        const n = r.count ?? 0;
-        return { totalLenM: ((L + 2 * anchor) * n) / 1000, countTotal: n };
-      }
     }
+
     const n = r.count ?? 0;
     const perBar = L + 2 * la;
     return { totalLenM: (perBar * n) / 1000, countTotal: n };
@@ -137,16 +167,16 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const Lx = g.Lx ?? 0;
     const Ly = g.Ly ?? 0;
     if (r.role === "NEG") {
-      // 支座负筋：沿 Ly 边等距布置，单根长度 = 2 × extension + 支座宽 200（简化）
-      const ext = r.extension ?? Lx / 4;
+      const support = g.slabSupport;
+      const ratio = support?.spanRatio ?? (support?.type === "continuous" ? 1 / 3 : support?.type === "cantilever" ? 1 : 1 / 4);
+      const ext = r.extension ?? Math.round(Lx * ratio);
       const perBar = 2 * ext + 200;
-      const n = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const n = gridCount(Ly, r.spacing);
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.spacing) {
-      const n = Math.floor(Ly / r.spacing) + 1;
-      // 板下部纵筋锚固：伸至支座中心线且 ≥ 5d — 22G101-1 第2-50页
-      const anchor = Math.max(200 / 2, 5 * r.diameter);
+      const n = gridCount(Ly, r.spacing);
+      const anchor = Math.max(100, 5 * r.diameter);
       const perBar = Lx + 2 * anchor;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
@@ -157,21 +187,18 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const L = g.L ?? 0;
     const h = g.h ?? 0;
     if (r.role === "HORIZONTAL") {
-      // 水平分布筋：沿层高布置，每根长=墙长+两端锚固
-      const n = r.spacing ? Math.floor(h / r.spacing) + 1 : 0;
+      const n = gridCount(h, r.spacing);
       const perBar = L + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "VERTICAL") {
-      // 竖向分布筋：沿墙长布置，每根高=层高+搭接
-      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const n = gridCount(L, r.spacing);
       const perBar = h + 1.2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "TIE") {
-      // 拉筋：梅花形布置，双向间距 spacing
-      const nH = r.spacing ? Math.floor(h / r.spacing) + 1 : 0;
-      const nL = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const nH = gridCount(h, r.spacing);
+      const nL = gridCount(L, r.spacing);
       const n = nH * nL;
       const perBar = (g.b ?? 200) + 2 * 6 * r.diameter;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
@@ -180,16 +207,20 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
   }
 
   if (c.type === "STAIR") {
-    const b = g.b ?? 0;  // 梯板宽
-    const L = g.L ?? 0;  // 水平总长
+    const stair = stairDerived(g);
     if (r.role === "LONGITUDINAL") {
-      const n = r.spacing ? Math.floor(b / r.spacing) + 1 : 0;
-      const perBar = L + 2 * la;
+      const n = gridCount(stair.width, r.spacing);
+      const perBar = stair.slopeLength + stair.landingLength + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "DIST") {
-      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
-      const perBar = b;
+      const n = gridCount(stair.slopeLength + stair.landingLength, r.spacing);
+      const perBar = stair.width;
+      return { totalLenM: (perBar * n) / 1000, countTotal: n };
+    }
+    if (r.role === "CONSTRUCT") {
+      const n = r.count ?? 2;
+      const perBar = stair.slopeLength + stair.landingLength + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     return { totalLenM: 0, countTotal: 0 };
@@ -199,20 +230,21 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const Lx = g.Lx ?? 0;
     const Ly = g.Ly ?? 0;
     if (r.role === "BOT_X" || r.role === "TOP_X") {
-      const n = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const n = gridCount(Ly, r.spacing);
       const perBar = Lx + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "BOT_Y" || r.role === "TOP_Y") {
-      const n = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const n = gridCount(Lx, r.spacing);
       const perBar = Ly + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "TIE") {
-      const nX = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
-      const nY = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const nX = gridCount(Lx, r.spacing);
+      const nY = gridCount(Ly, r.spacing);
       const t = g.t ?? 0;
-      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * nX * nY) / 1000, countTotal: nX * nY };
+      const n = nX * nY;
+      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * n) / 1000, countTotal: n };
     }
     return { totalLenM: 0, countTotal: 0 };
   }
@@ -221,7 +253,7 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const b = g.b ?? 0;
     const L = g.L ?? 0;
     if (r.role === "TRANSVERSE") {
-      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const n = gridCount(L, r.spacing);
       const perBar = b + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
@@ -237,20 +269,21 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const Lx = g.Lx ?? 0;
     const Ly = g.Ly ?? 0;
     if (r.role === "BOT_X" || r.role === "TOP_X") {
-      const n = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const n = gridCount(Ly, r.spacing);
       const perBar = Lx + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "BOT_Y" || r.role === "TOP_Y") {
-      const n = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
+      const n = gridCount(Lx, r.spacing);
       const perBar = Ly + 2 * la;
       return { totalLenM: (perBar * n) / 1000, countTotal: n };
     }
     if (r.role === "TIE") {
-      const nX = r.spacing ? Math.floor(Lx / r.spacing) + 1 : 0;
-      const nY = r.spacing ? Math.floor(Ly / r.spacing) + 1 : 0;
+      const nX = gridCount(Lx, r.spacing);
+      const nY = gridCount(Ly, r.spacing);
       const t = g.t ?? 0;
-      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * nX * nY) / 1000, countTotal: nX * nY };
+      const n = nX * nY;
+      return { totalLenM: ((t - 2 * cover + 2 * 6 * r.diameter) * n) / 1000, countTotal: n };
     }
     return { totalLenM: 0, countTotal: 0 };
   }
@@ -259,38 +292,35 @@ function rebarTotalLength(c: Component, r: Rebar): { totalLenM: number; countTot
     const L = g.L ?? 0;
     const D = g.D ?? 0;
     if (r.role === "SPIRAL") {
-      // 螺旋箍：桩顶加密区5D + 非加密区
-      const dz = r.densifyLength ?? 0;
-      const ds = r.densifySpacing;
-      const ns = r.spacing ?? 0;
+      const denseLength = r.densifyLength ?? 0;
+      const denseSpacing = r.densifySpacing;
+      const spacing = r.spacing ?? 0;
       const per = Math.PI * (D - 2 * cover);
       let n = 0;
-      if (dz > 0 && ds && ds > 0) {
-        n += Math.floor(dz / ds) + 1; // 桩顶加密区
-        const middle = Math.max(0, L - dz);
-        if (ns > 0 && middle > 0) n += Math.max(0, Math.floor(middle / ns) - 1);
-      } else if (ns > 0) {
-        n = Math.floor(L / ns) + 1;
+      if (denseLength > 0 && denseSpacing && denseSpacing > 0) {
+        n += Math.floor(denseLength / denseSpacing) + 1;
+        const middle = Math.max(0, L - denseLength);
+        if (spacing > 0 && middle > 0) n += Math.max(0, Math.floor(middle / spacing) - 1);
+      } else if (spacing > 0) {
+        n = Math.floor(L / spacing) + 1;
       }
       return { totalLenM: (per * n) / 1000, countTotal: n };
     }
     if (r.role === "STIFFEN") {
-      // 加劲箍：焊接闭合箍，周长 + 搭接
-      const per = Math.PI * (D - 2 * cover) + 80; // 搭接80mm
+      const per = Math.PI * (D - 2 * cover) + 80;
       const n = r.count ?? 0;
       return { totalLenM: (per * n) / 1000, countTotal: n };
     }
     if (r.role === "STIRRUP") {
       const per = Math.PI * (D - 2 * cover);
-      const n = r.spacing ? Math.floor(L / r.spacing) + 1 : 0;
+      const n = gridCount(L, r.spacing);
       return { totalLenM: (per * n) / 1000, countTotal: n };
     }
-    // 主筋：通长 + 桩顶入承台锚固 — 22G101-3 第2-48页
     const n = r.count ?? 0;
-    const embed = pileEmbedDepth(D);
-    const perBar = L + la + embed; // la为锚入承台长度（简化取la）
+    const perBar = L + la + pileEmbedDepth(D);
     return { totalLenM: (perBar * n) / 1000, countTotal: n };
   }
+
   return { totalLenM: 0, countTotal: 0 };
 }
 
@@ -316,6 +346,7 @@ export function calcComponent(c: Component): QuantityResult {
     formworkArea: formwork,
     rebarByDia,
     totalRebarWeight: total,
+    notes: quantityNotes(c),
   };
 }
 
@@ -325,7 +356,9 @@ export function calcAll(cs: Component[]): QuantityResult[] {
 
 export function aggregate(results: QuantityResult[]) {
   const rebar: Record<string, { weight: number; length: number; grade: string }> = {};
-  let volume = 0, formwork = 0, rebarTotal = 0;
+  let volume = 0;
+  let formwork = 0;
+  let rebarTotal = 0;
   for (const r of results) {
     volume += r.concreteVolume;
     formwork += r.formworkArea;
